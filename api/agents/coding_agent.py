@@ -81,6 +81,45 @@ def _fix_scan_node(state: FixState) -> FixState:
     return {**state, "findings": findings, "error": None}
 
 
+MAX_SOURCE_CHARS_PER_FILE = 6000
+
+
+def _read_source_context(repo_path: Path, findings: list[dict]) -> str:
+    """Findings alone (rule id/line/message) aren't enough for a model to
+    produce an accurate patch — it needs the real file content, or it
+    hallucinates code that was never there. Reads each unique file a
+    finding points at, relative to the repo root semgrep scanned."""
+    seen: list[str] = []
+    for f in findings:
+        fp = f.get("file_path")
+        if fp and fp not in seen:
+            seen.append(fp)
+
+    blocks = []
+    for fp in seen:
+        # semgrep reports paths as seen inside its container mount (/src/...);
+        # strip that prefix to resolve against the real repo on disk.
+        relative = fp.split("/src/", 1)[-1] if "/src/" in fp else fp.lstrip("/")
+        full_path = repo_path / relative
+        try:
+            content = full_path.read_text(errors="replace")[:MAX_SOURCE_CHARS_PER_FILE]
+        except OSError:
+            continue
+        blocks.append(f"--- {relative} ---\n{content}")
+    return "\n\n".join(blocks)
+
+
+def _strip_markdown_fences(text: str) -> str:
+    text = text.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        lines = lines[1:]  # drop opening ``` or ```diff
+        if lines and lines[-1].strip().startswith("```"):
+            lines = lines[:-1]
+        text = "\n".join(lines)
+    return text.strip()
+
+
 def _fix_patch_node(state: FixState) -> FixState:
     if state.get("error") or not state["findings"]:
         return {**state, "diff": ""}
@@ -90,17 +129,20 @@ def _fix_patch_node(state: FixState) -> FixState:
         f"- [{f['severity']}] {f['title']} ({f['file_path']}:{f['line']}) — {f['description']}"
         for f in findings
     )
+    source_context = _read_source_context(Path(state["path"]).resolve(), findings)
     prompt = (
         "You are a security engineer. For the findings below, produce a single "
         "unified diff (git apply compatible, paths relative to repo root) that "
-        "fixes them with the smallest possible change. Output ONLY the diff, "
-        "no explanation, no markdown fences.\n\n" + listing
+        "fixes them with the smallest possible change. Base the patch on the "
+        "actual file content given — do not invent code that isn't shown. "
+        "Output ONLY the diff, no explanation, no markdown fences.\n\n"
+        f"Findings:\n{listing}\n\nFile contents:\n{source_context}"
     )
     try:
         diff = complete([{"role": "user", "content": prompt}], purpose="coding")
     except LLMUnavailable as exc:
         return {**state, "diff": "", "error": str(exc)}
-    return {**state, "diff": diff.strip()}
+    return {**state, "diff": _strip_markdown_fences(diff)}
 
 
 def _fix_apply_node(state: FixState) -> FixState:
