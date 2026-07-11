@@ -1,0 +1,30 @@
+# Environments
+.venv/
+venv/
+__pycache__/
+*.pyc
+node_modules/
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+build/
+*.egg-info/
+
+# Editors / OS
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+
+# Data & secrets (never commit real target data, creds, or scan output)
+data/
+findings/
+*.db
+*.sqlite
+*.sqlite3
+credentials*
+secrets*
+!docs/**/secrets*
