@@ -32,6 +32,8 @@ def run_semgrep(path: Path) -> list[dict]:
         raise ToolError("docker CLI not found — Docker Desktop must be installed and running") from exc
     except subprocess.TimeoutExpired as exc:
         raise ToolError(f"semgrep timed out after {settings.semgrep_timeout_seconds}s") from exc
+    result.stdout = result.stdout or ""
+    result.stderr = result.stderr or ""
 
     # semgrep exits 1 when it finds issues — that's not a tool failure.
     if result.returncode not in (0, 1):
@@ -78,7 +80,7 @@ def run_tests(repo_path: Path) -> tuple[bool, str]:
         text=True,
         timeout=settings.test_run_timeout_seconds,
     )
-    return result.returncode == 0, (result.stdout + result.stderr)[-4000:]
+    return result.returncode == 0, ((result.stdout or "") + (result.stderr or ""))[-4000:]
 
 
 def git_commit(repo_path: Path, message: str) -> None:
@@ -89,11 +91,18 @@ def git_commit(repo_path: Path, message: str) -> None:
 def _run_docker(cmd: list[str], tool_name: str, timeout: int | None = None) -> subprocess.CompletedProcess:
     timeout = timeout if timeout is not None else settings.tool_timeout_seconds
     try:
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     except FileNotFoundError as exc:
         raise ToolError("docker CLI not found — Docker Desktop must be installed and running") from exc
     except subprocess.TimeoutExpired as exc:
         raise ToolError(f"{tool_name} timed out after {timeout}s") from exc
+    # Under concurrent docker invocations (multiple scans in flight at once,
+    # each spawning subprocesses from FastAPI's threadpool), stdout/stderr
+    # have been observed coming back None despite capture_output=True/
+    # text=True, which should guarantee a str — never trust it blindly.
+    result.stdout = result.stdout or ""
+    result.stderr = result.stderr or ""
+    return result
 
 
 def _parse_json_lines(text: str) -> list[dict]:

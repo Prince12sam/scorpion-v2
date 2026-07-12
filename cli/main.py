@@ -88,13 +88,51 @@ def fix(
 
 
 @app.command()
-def scan(target: str = typer.Argument(..., help="Domain/IP/host to scan")) -> None:
+def scan(
+    target: str = typer.Argument(..., help="Domain/IP/host to scan"),
+    self_attest: str = typer.Option(
+        None,
+        "--self-attest",
+        help="Non-interactively attest ownership/authorization with this statement "
+        "(skips the prompt below; still the weakest, logged verification method)",
+    ),
+) -> None:
     """Orchestrator-driven recon + active scan chain (Pentest Agent).
 
     Active stages only run against targets verified in scope — see
-    docs/SECURITY_AND_AUTHORIZATION.md. Use `es verify-target` first for
-    anything that isn't your own machine/private network.
+    docs/SECURITY_AND_AUTHORIZATION.md. `localhost`/private IPs auto-verify.
+    Anything else prompts for self-attestation (weak, logged) or use
+    `es verify-target` first for a real, provable verification.
     """
+    try:
+        status = post("/v1/targets/status", {"target": target})
+    except httpx.ConnectError:
+        _connection_error_hint()
+        raise typer.Exit(1)
+
+    if status["status"] != "verified":
+        statement = self_attest
+        if not statement:
+            console.print(
+                f"[yellow]Target '{target}' isn't verified — no one has technically proven "
+                "control over it (see docs/SECURITY_AND_AUTHORIZATION.md).[/yellow]"
+            )
+            if not typer.confirm(
+                f"Do you personally attest that you own or are explicitly authorized to test "
+                f"'{target}'? This is logged against the target, not a blanket approval."
+            ):
+                console.print(
+                    "Not scanning. For a stronger, provable verification instead, use "
+                    "[bold]es verify-target[/bold] (file-token method)."
+                )
+                raise typer.Exit(1)
+            statement = typer.prompt(
+                'Briefly state your authorization (e.g. "I own this domain", "bug bounty program X")'
+            )
+
+        attest = post("/v1/targets/self-attest", {"target": target, "statement": statement})
+        console.print(f"[dim]Recorded: {attest['verification_method']}[/dim]")
+
     try:
         result = post("/v1/scan", {"target": target})
     except httpx.ConnectError:

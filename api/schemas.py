@@ -63,3 +63,18 @@ class VerifyTargetResponse(BaseModel):
     status: str
     verification_method: str | None = None
     error: str | None = None
+
+
+class TargetStatusRequest(BaseModel):
+    target: str
+
+
+class TargetStatusResponse(BaseModel):
+    status: str
+    verification_method: str | None = None
+    expires_at: str | None = None
+
+
+class SelfAttestRequest(BaseModel):
+    target: str
+    statement: str

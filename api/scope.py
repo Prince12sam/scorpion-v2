@@ -48,6 +48,10 @@ def _ttl_expiry() -> datetime:
     return datetime.now(timezone.utc) + timedelta(days=settings.scope_verification_ttl_days)
 
 
+def _self_attest_expiry() -> datetime:
+    return datetime.now(timezone.utc) + timedelta(days=settings.self_attest_ttl_days)
+
+
 def get_or_create_target(session: Session, identifier: str) -> Target:
     target = session.scalar(select(Target).where(Target.identifier == identifier))
     if target is not None:
@@ -89,6 +93,29 @@ def verify_file_token(session: Session, identifier: str, expected_token: str) ->
     session.commit()
     session.refresh(target)
     return target
+
+
+def verify_self_attestation(session: Session, identifier: str, statement: str) -> Target:
+    """docs/SECURITY_AND_AUTHORIZATION.md verification method 3 — the
+    weakest one, by design. This is NOT a conversational "sure, go ahead":
+    it requires an explicit, non-default CLI action (`scan --self-attest`
+    or a prompt the user must actively confirm) and the actual attestation
+    text is stored so it shows up in any report — a false attestation is
+    attributable, unlike a chat "yes". Short TTL relative to the other
+    methods to keep re-use of a false or stale attestation bounded.
+    """
+    target = get_or_create_target(session, identifier)
+    target.status = "verified"
+    target.verification_method = f"self-attested: {statement.strip()}"
+    target.authorized_actions = [PASSIVE_RECON, ACTIVE_SCAN]
+    target.expires_at = _self_attest_expiry()
+    session.commit()
+    session.refresh(target)
+    return target
+
+
+def get_target_status(session: Session, identifier: str) -> Target:
+    return get_or_create_target(session, identifier)
 
 
 def resolve_for_container(identifier: str) -> str:

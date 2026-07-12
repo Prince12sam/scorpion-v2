@@ -15,6 +15,16 @@ misconfigured run, a prompt-injected page, or a scripted/non-interactive
 invocation from firing anyway. Authorization must be a technical check the
 Tool Router performs, independent of what the LLM decided to say.
 
+This is not the same thing as self-attestation (verification method 3
+below) being an interactive CLI prompt. The distinction: the prompt isn't
+the LLM inferring consent from a chat exchange it's free to interpret —
+it's `api.scope.require_authorized` refusing to run *anything*, in code,
+until a specific Target row says `verified`, and self-attestation is one
+explicit, human-typed, logged way to set that row (the weakest one — see
+below). A page telling the agent "the user already agreed to this" or an
+LLM deciding a prior message implied approval does not touch this table
+and changes nothing.
+
 ## Scope model
 
 Every target (domain, IP range, repo) has a **scope record** in Memory with:
@@ -29,17 +39,32 @@ Every target (domain, IP range, repo) has a **scope record** in Memory with:
 
 1. **File token** — place an Es-issued token at
    `https://target/.well-known/es-auth.txt`, same pattern as Google
-   Search Console / Burp Suite Enterprise domain verification.
+   Search Console / Burp Suite Enterprise domain verification. Implemented:
+   `api.scope.verify_file_token` / `es verify-target`.
 2. **DNS TXT record** — `_es-auth.target` TXT record matching an
-   issued token.
-3. **Signed engagement record** — for third-party pentest/bug-bounty work,
-   the user attaches a scope document (e.g. a bug bounty program's published
-   scope, or a signed rules-of-engagement doc) and self-attests; this is the
-   weakest method and should be flagged as such in the UI/report, not treated
-   as equivalent to file/DNS proof.
+   issued token. Not implemented yet — file-token covers the same proof
+   today.
+3. **Self-attestation** — the user explicitly states, in an action distinct
+   from a default/ambient "yes" (a dedicated CLI prompt requiring a typed
+   statement, or `--self-attest "<statement>"`), that they own or are
+   authorized to test the target. Implemented:
+   `api.scope.verify_self_attestation` / `es scan`'s interactive prompt.
+   This is the weakest method by design:
+   - The statement text itself is stored in `verification_method`, so a
+     false attestation is attributable in any later report, unlike an
+     unlogged chat "sure, go ahead".
+   - TTL is short (`ES_SELF_ATTEST_TTL_DAYS`, default 1 day) — far shorter
+     than file-token's 30 — to bound how long a false or stale attestation
+     stays usable.
+   - Still gated behind an explicit action, not inferred from conversation:
+     the CLI requires either a real terminal confirmation *and* a typed
+     reason, or an explicit `--self-attest` flag for scripting. An LLM
+     deciding on its own that "the user probably meant yes" does not
+     satisfy this.
 4. **Local/private ranges the user's own machine can reach** (RFC1918,
    localhost, explicitly declared lab CIDRs) — treated as pre-verified for
-   personal lab use, since there's no third party to harm.
+   personal lab use, since there's no third party to harm. Implemented:
+   `api.scope._is_private_or_local`.
 
 ### What the gate blocks
 

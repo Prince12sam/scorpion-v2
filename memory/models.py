@@ -47,7 +47,7 @@ class Target(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     identifier: Mapped[str] = mapped_column(String(512), unique=True)
     status: Mapped[str] = mapped_column(String(32), default="unverified")  # unverified|verified|revoked
-    verification_method: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    verification_method: Mapped[str | None] = mapped_column(String(512), nullable=True)
     authorized_actions: Mapped[list] = mapped_column(JSON, default=list)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

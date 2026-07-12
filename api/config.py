@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     # Every target must reach `verified` status via api/scope.py before any
     # active-scan tool call — see docs/SECURITY_AND_AUTHORIZATION.md.
     scope_verification_ttl_days: int = 30
+    # Self-attestation is the weakest verification method (no technical
+    # proof of control) — short TTL bounds how long a false or stale
+    # attestation stays usable.
+    self_attest_ttl_days: int = 1
 
     # Docker Desktop (Windows/Mac) can't reach the host via localhost/127.0.0.1
     # from inside a container; it exposes the host under this DNS name instead.
