@@ -8,6 +8,7 @@ pydantic-settings==2.6.1
 litellm==1.55.3
 langgraph==0.2.60
 typer==0.15.1
+click<8.2  # typer 0.15.1's rich help formatter breaks on click>=8.2's make_metavar(ctx) signature change
 rich==13.9.4
 httpx
 pytest==8.3.4

@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "es"
+version = "0.1.0"
+description = "Es - local AI security platform (Agent Core, CLI, Tool Orchestrator)"
+requires-python = ">=3.11"
+
+[project.scripts]
+es = "cli.main:app"
+
+[tool.setuptools]
+packages = ["api", "api.agents", "api.routes", "cli", "memory"]
