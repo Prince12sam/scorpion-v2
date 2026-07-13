@@ -1,5 +1,4 @@
 import http.server
-import socketserver
 import threading
 import uuid
 
@@ -10,8 +9,12 @@ from api.main import app
 from api.tool_router import run_httpx, run_nmap
 
 
-def _start_http_server(port: int) -> socketserver.TCPServer:
-    httpd = socketserver.TCPServer(("0.0.0.0", port), http.server.SimpleHTTPRequestHandler)
+def _start_http_server(port: int) -> http.server.ThreadingHTTPServer:
+    # ThreadingHTTPServer, not a plain single-threaded HTTPServer/TCPServer —
+    # see tests/test_scan_tools.py's _start_http_server for why (ffuf's
+    # concurrent connections mostly got dropped against a single-threaded
+    # one, making results look randomly incomplete).
+    httpd = http.server.ThreadingHTTPServer(("0.0.0.0", port), http.server.SimpleHTTPRequestHandler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     return httpd
 

@@ -5,7 +5,6 @@ integration works, matched against a local, hermetic HTTP server."""
 
 import functools
 import http.server
-import socketserver
 import tempfile
 import threading
 from pathlib import Path
@@ -16,13 +15,19 @@ from api.tool_router import run_dalfox, run_ffuf, run_katana, run_nuclei, run_sq
 TARGET_HOST = settings.container_host_alias
 
 
-def _start_http_server(port: int) -> tuple[socketserver.TCPServer, tempfile.TemporaryDirectory]:
+def _start_http_server(port: int) -> tuple[http.server.ThreadingHTTPServer, tempfile.TemporaryDirectory]:
     tmpdir = tempfile.TemporaryDirectory()
     (Path(tmpdir.name) / "robots.txt").write_text("User-agent: *\n")
     (Path(tmpdir.name) / "index.html").write_text("<html>hi</html>")
 
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=tmpdir.name)
-    httpd = socketserver.TCPServer(("0.0.0.0", port), handler)
+    # Plain (single-threaded) HTTPServer/TCPServer handles one connection at
+    # a time — found the hard way that ffuf's default 40 concurrent
+    # connections mostly get refused/dropped against it, making results
+    # look randomly incomplete even though the tool itself is working fine
+    # (proven separately against a real production site). Threaded server
+    # actually handles concurrent tools correctly.
+    httpd = http.server.ThreadingHTTPServer(("0.0.0.0", port), handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     return httpd, tmpdir
 
