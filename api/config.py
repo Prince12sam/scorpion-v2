@@ -50,12 +50,18 @@ class Settings(BaseSettings):
     ffuf_docker_image: str = "scorpion/ffuf:local"
     dalfox_docker_image: str = "hahwul/dalfox:latest"
     sqlmap_docker_image: str = "googlesky/sqlmap:latest"
+    zap_docker_image: str = "zaproxy/zap-stable"
 
     tool_timeout_seconds: int = 180
     # nuclei's first run per template-cache-volume downloads the templates
     # repo; subsequent runs reuse the cache and are fast, but budget for a
     # cold run.
     nuclei_timeout_seconds: int = 300
+    zap_baseline_timeout_seconds: int = 300
+    # zap-full-scan actively attacks every spidered page/param, not just a
+    # fixed template set like nuclei — genuinely slower on a real site with
+    # real content, budget generously.
+    zap_full_scan_timeout_seconds: int = 900
     ffuf_wordlist_path: str = "docker/tools/ffuf/wordlist.txt"
     # `scan` enumerates subdomains via subfinder, probes all of them plus the
     # root with httpx, then runs the rest of the pipeline against every host

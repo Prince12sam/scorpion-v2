@@ -10,7 +10,16 @@ import threading
 from pathlib import Path
 
 from api.config import settings
-from api.tool_router import run_dalfox, run_ffuf, run_katana, run_nuclei, run_sqlmap, run_subfinder
+from api.tool_router import (
+    run_dalfox,
+    run_ffuf,
+    run_katana,
+    run_nuclei,
+    run_sqlmap,
+    run_subfinder,
+    run_zap_baseline,
+    run_zap_full_scan,
+)
 
 TARGET_HOST = settings.container_host_alias
 
@@ -100,3 +109,35 @@ def test_sqlmap_runs_a_real_scan_cleanly():
         httpd.shutdown()
         tmpdir.cleanup()
     assert findings == []
+
+
+def test_zap_baseline_runs_a_real_scan_cleanly():
+    port = 8796
+    httpd, tmpdir = _start_http_server(port)
+    try:
+        findings = run_zap_baseline(f"http://{TARGET_HOST}:{port}")
+    finally:
+        httpd.shutdown()
+        tmpdir.cleanup()
+    # Unlike nuclei/dalfox/sqlmap (which hunt exploitable vulnerabilities a
+    # bare static file server genuinely has none of), ZAP's passive scanner
+    # also flags general hygiene issues — e.g. Python's SimpleHTTPRequestHandler
+    # sends no Content-Security-Policy header, which is a real, correct
+    # finding. This asserts the report round-trips through the mounted
+    # volume and parses into well-formed findings, not that it's empty.
+    assert len(findings) > 0
+    assert all(f["source_tool"] == "zap-baseline" for f in findings)
+    assert all(f["severity"] in ("info", "low", "medium", "high") for f in findings)
+
+
+def test_zap_full_scan_runs_a_real_scan_cleanly():
+    port = 8797
+    httpd, tmpdir = _start_http_server(port)
+    try:
+        findings = run_zap_full_scan(f"http://{TARGET_HOST}:{port}")
+    finally:
+        httpd.shutdown()
+        tmpdir.cleanup()
+    assert len(findings) > 0
+    assert all(f["source_tool"] == "zap-full-scan" for f in findings)
+    assert all(f["severity"] in ("info", "low", "medium", "high") for f in findings)

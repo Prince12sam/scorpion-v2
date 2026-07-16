@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -459,3 +460,83 @@ def run_sqlmap(url: str) -> list[dict]:
                     }
                 )
     return findings
+
+
+_ZAP_RISK_SEVERITY = {"0": "info", "1": "low", "2": "medium", "3": "high"}
+
+
+def _parse_zap_report(report_path: Path, source_tool: str) -> list[dict]:
+    try:
+        data = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ToolError(f"could not parse {source_tool} report: {exc}") from exc
+
+    findings = []
+    for site in data.get("site", []) or []:
+        for alert in site.get("alerts", []) or []:
+            severity = _ZAP_RISK_SEVERITY.get(str(alert.get("riskcode", "")), "info")
+            instances = alert.get("instances", []) or []
+            sample_uri = instances[0].get("uri", "") if instances else ""
+            findings.append(
+                {
+                    "source_tool": source_tool,
+                    "severity": severity,
+                    "title": alert.get("name") or alert.get("alert") or f"{source_tool}-finding",
+                    "description": (
+                        f"{alert.get('desc', '')} "
+                        f"({len(instances)} instance(s), e.g. {sample_uri})"
+                    ).strip(),
+                    "file_path": None,
+                    "line": None,
+                }
+            )
+    return findings
+
+
+def _run_zap_packaged_scan(
+    url: str, script: str, source_tool: str, timeout: int, extra_args: list[str] | None = None
+) -> list[dict]:
+    """Shared runner for ZAP's packaged scan scripts (zap-baseline.py,
+    zap-full-scan.py) — both take a target URL, spider/attack it, and can
+    write a JSON report. The container is ephemeral (--rm), so the report
+    has to land on a mounted host directory to survive past the run,
+    unlike the other tools here which just read stdout.
+    """
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        report_name = "zap-report.json"
+        cmd = [
+            "docker", "run", "--rm",
+            "-v", f"{Path(tmp_dir).resolve()}:/zap/wrk/:rw",
+            settings.zap_docker_image,
+            script, "-t", url, "-J", report_name,
+            *(extra_args or []),
+        ]
+        result = _run_docker(cmd, source_tool, timeout=timeout)
+        # zap-baseline.py/zap-full-scan.py use the exit code to signal alert
+        # severity found (1 = warn present, 2 = fail present), not tool
+        # failure — same non-zero-but-fine pattern as semgrep elsewhere here.
+        report_path = Path(tmp_dir) / report_name
+        if result.returncode not in (0, 1, 2) or not report_path.exists():
+            raise ToolError(f"{source_tool} failed (exit {result.returncode}): {result.stderr[-2000:]}")
+
+        return _parse_zap_report(report_path, source_tool)
+
+
+def run_zap_baseline(url: str) -> list[dict]:
+    """Passive scan via OWASP ZAP's zap-baseline.py — spiders the target
+    briefly and passively analyzes traffic, no attack payloads sent.
+    Same passive-recon classification as katana's crawl."""
+    return _run_zap_packaged_scan(
+        url, "zap-baseline.py", "zap-baseline", settings.zap_baseline_timeout_seconds
+    )
+
+
+def run_zap_full_scan(url: str) -> list[dict]:
+    """Active scan via OWASP ZAP's zap-full-scan.py — spiders the target
+    then actively attacks every discovered page/parameter. A different
+    scanning engine than nuclei/dalfox/sqlmap, so it catches a different
+    (overlapping but not identical) set of issues. Active-scan: sends
+    exploit-style payloads, never run without verified authorization."""
+    return _run_zap_packaged_scan(
+        url, "zap-full-scan.py", "zap-full-scan", settings.zap_full_scan_timeout_seconds
+    )

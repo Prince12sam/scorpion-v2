@@ -42,6 +42,8 @@ from api.tool_router import (
     run_nuclei,
     run_sqlmap,
     run_subfinder,
+    run_zap_baseline,
+    run_zap_full_scan,
 )
 
 TargetForm = Literal["host", "url"]
@@ -60,11 +62,16 @@ class ToolStage:
 # tool_router.py — nothing else in this module changes.
 PIPELINE: list[ToolStage] = [
     ToolStage(name="katana", action_class=PASSIVE_RECON, runner=run_katana, target_form="url"),
+    ToolStage(name="zap-baseline", action_class=PASSIVE_RECON, runner=run_zap_baseline, target_form="url"),
     ToolStage(name="nmap", action_class=ACTIVE_SCAN, runner=run_nmap, target_form="host"),
     ToolStage(name="nuclei", action_class=ACTIVE_SCAN, runner=run_nuclei, target_form="url"),
     ToolStage(name="ffuf", action_class=ACTIVE_SCAN, runner=run_ffuf, target_form="url"),
     ToolStage(name="dalfox", action_class=ACTIVE_SCAN, runner=run_dalfox, target_form="url"),
     ToolStage(name="sqlmap", action_class=ACTIVE_SCAN, runner=run_sqlmap, target_form="url"),
+    # A different scanning engine than nuclei/dalfox/sqlmap, run last since
+    # zap-full-scan is by far the slowest stage (it actively attacks every
+    # spidered page/param, not a fixed template set).
+    ToolStage(name="zap-full-scan", action_class=ACTIVE_SCAN, runner=run_zap_full_scan, target_form="url"),
 ]
 
 

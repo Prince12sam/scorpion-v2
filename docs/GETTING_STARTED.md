@@ -2,8 +2,8 @@
 
 Scorpion is a local-first AI security platform: a Coding Agent (`analyze`/`fix`)
 and a Pentest Agent (`scan`, chaining httpx, subfinder, katana, nmap, nuclei,
-ffuf, dalfox, sqlmap) behind one CLI, with an LLM router that works with
-either a cloud provider or a local model (Ollama).
+ffuf, dalfox, sqlmap, and OWASP ZAP) behind one CLI, with an LLM router that
+works with either a cloud provider or a local model (Ollama).
 
 Written and verified on Windows and Linux — see docs/WINDOWS.md /
 docs/LINUX.md for what's different (and what actually went wrong and got
@@ -91,10 +91,13 @@ several minutes end-to-end (nuclei alone can run ~3000 requests).
 
 `scan` doesn't just check the one host you give it: subfinder discovers
 its subdomains, httpx probes all of them (one batched call) to find which
-actually respond, and the rest of the pipeline (katana, nmap, nuclei,
-ffuf, dalfox, sqlmap) runs once per live host — a discovered
-`api.example.com` gets the same active scan as `example.com` itself, not
-just a line in a subdomain list. This is capped at 5 hosts by default
+actually respond, and the rest of the pipeline (katana, zap-baseline, nmap,
+nuclei, ffuf, dalfox, sqlmap, zap-full-scan) runs once per live host — a
+discovered `api.example.com` gets the same active scan as `example.com`
+itself, not just a line in a subdomain list. zap-full-scan is by far the
+slowest stage (it actively attacks every spidered page/param rather than a
+fixed template set) — expect several extra minutes per host versus nuclei
+alone. This is capped at 5 hosts by default
 (`SCORPION_MAX_ENUMERATED_HOSTS`) to bound how long a scan takes and how
 much a single target gets hit; anything beyond the cap is still reported
 by subfinder, just not actively scanned, and the warnings say how many
