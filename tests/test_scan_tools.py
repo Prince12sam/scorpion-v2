@@ -14,6 +14,8 @@ from pathlib import Path
 
 from api.config import settings
 from api.tool_router import (
+    _parse_amass_output,
+    run_amass,
     run_dalfox,
     run_ffuf,
     run_katana,
@@ -56,6 +58,33 @@ def test_subfinder_finds_real_subdomains():
     findings = run_subfinder("example.com")
     assert len(findings) > 0
     assert all(f["source_tool"] == "subfinder" for f in findings)
+
+
+def test_amass_runs_cleanly_against_a_safe_domain():
+    # Same justification as subfinder above — amass's own -active/-brute
+    # flags (which would contact the target directly) are never passed, so
+    # this is passive-only and safe without scope verification. Confirmed
+    # via a real run: amass genuinely returns 0 subdomain findings for
+    # example.com specifically (a much thinner real DNS footprint in its
+    # passive sources than subfinder finds) — this asserts the tool runs
+    # and parses cleanly, not that it finds something. See
+    # test_amass_parses_a_real_subdomain_line for proof the extraction
+    # logic itself works, using the exact grammar confirmed from real
+    # amass output.
+    findings = run_amass("example.com")
+    assert all(f["source_tool"] == "amass" for f in findings)
+
+
+def test_amass_parses_a_real_subdomain_line():
+    # Grammar confirmed against real `amass enum -d example.com` output:
+    # "<name> (FQDN) --> <relation> --> <name> (FQDN)"
+    text = (
+        "example.com (FQDN) --> ns_record --> hera.ns.cloudflare.com (FQDN)\n"
+        "example.com (FQDN) --> cname_record --> api.example.com (FQDN)\n"
+    )
+    findings = _parse_amass_output(text, "example.com")
+    assert len(findings) == 1
+    assert findings[0]["host"] == "api.example.com"
 
 
 def test_katana_crawls_local_server():

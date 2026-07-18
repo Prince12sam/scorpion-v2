@@ -5,7 +5,10 @@ Core never shells out directly, normalizes every tool's output to one
 finding schema, and enforces the scope gate per invocation.
 
 A scan runs in three phases:
-  1. Enumeration — subfinder discovers subdomains of the root target.
+  1. Enumeration — every source in ENUMERATION_SOURCES (subfinder, amass)
+     discovers subdomains of the root target. Different tools draw on
+     different passive data sources, so running both surfaces more real
+     subdomains than either alone.
   2. Liveness — httpx probes the root plus every discovered subdomain (one
      batched container call) to find which actually respond.
   3. Per-host pipeline — the declarative PIPELINE below (katana, nmap,
@@ -42,6 +45,7 @@ from api.scope import (
 )
 from api.tool_router import (
     ToolError,
+    run_amass,
     run_dalfox,
     run_ffuf,
     run_httpx,
@@ -55,6 +59,14 @@ from api.tool_router import (
 )
 
 TargetForm = Literal["host", "url"]
+
+# Passive subdomain-discovery sources — each takes a bare domain and
+# returns findings with a "host" key for every subdomain found (see
+# run_subfinder/run_amass). Adding a source is a data change here only.
+ENUMERATION_SOURCES: list[tuple[str, Callable[[str], list[dict]]]] = [
+    ("subfinder", run_subfinder),
+    ("amass", run_amass),
+]
 
 
 @dataclass(frozen=True)
@@ -107,18 +119,20 @@ def run_pipeline(session: Session, target: str) -> tuple[list[dict], list[str]]:
     root_url = _as_url(container_target)
 
     try:
-        # --- Phase 1: enumerate subdomains of the root target ---
+        # --- Phase 1: enumerate subdomains of the root target, from every source ---
         candidate_hosts = {root_host}
-        try:
-            require_authorized(session, target, PASSIVE_RECON)
-            scan_status.set_stage(target, "subfinder (enumeration)", 1, 2)
-            sub_findings = run_subfinder(root_host)
-            findings.extend(sub_findings)
-            candidate_hosts.update(f["host"] for f in sub_findings if f.get("host"))
-        except ScopeDenied as exc:
-            warnings.append(f"subfinder: skipped — {exc}")
-        except ToolError as exc:
-            warnings.append(f"subfinder: {exc}")
+        enum_total = len(ENUMERATION_SOURCES) + 1  # + httpx liveness below
+        for i, (name, runner) in enumerate(ENUMERATION_SOURCES, start=1):
+            try:
+                require_authorized(session, target, PASSIVE_RECON)
+                scan_status.set_stage(target, f"{name} (enumeration)", i, enum_total)
+                source_findings = runner(root_host)
+                findings.extend(source_findings)
+                candidate_hosts.update(f["host"] for f in source_findings if f.get("host"))
+            except ScopeDenied as exc:
+                warnings.append(f"{name}: skipped — {exc}")
+            except ToolError as exc:
+                warnings.append(f"{name}: {exc}")
 
         ordered_hosts = [root_host] + sorted(candidate_hosts - {root_host})
         hosts_to_probe = ordered_hosts[: settings.max_enumerated_hosts]
@@ -135,7 +149,7 @@ def run_pipeline(session: Session, target: str) -> tuple[list[dict], list[str]]:
         httpx_attempted = False
         try:
             require_authorized(session, target, PASSIVE_RECON)
-            scan_status.set_stage(target, "httpx (liveness)", 2, 2)
+            scan_status.set_stage(target, "httpx (liveness)", enum_total, enum_total)
             httpx_attempted = True
             httpx_findings = run_httpx(hosts_to_probe)
             findings.extend(httpx_findings)

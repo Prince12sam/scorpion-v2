@@ -302,6 +302,66 @@ def run_subfinder(domain: str) -> list[dict]:
     return findings
 
 
+_AMASS_FQDN_RE = re.compile(r"([\w.-]+) \(FQDN\)")
+
+
+def _parse_amass_output(text: str, domain: str) -> list[dict]:
+    hosts = set()
+    for match in _AMASS_FQDN_RE.finditer(text):
+        name = match.group(1)
+        # Genuine subdomains only — the root domain itself shows up
+        # constantly as a graph node (e.g. as the source of every ns_record
+        # line) and isn't something amass "discovered", it's the target.
+        if name != domain and name.endswith(f".{domain}"):
+            hosts.add(name)
+
+    findings = []
+    for host in sorted(hosts):
+        findings.append(
+            {
+                "source_tool": "amass",
+                "severity": "info",
+                "title": f"subdomain: {host}",
+                "description": "source: amass (passive enumeration)",
+                "file_path": None,
+                "line": None,
+                "host": host,
+            }
+        )
+    return findings
+
+
+def run_amass(domain: str) -> list[dict]:
+    """Passive subdomain enumeration via OWASP Amass (caffix/amass) — a
+    different data source mix than subfinder (its own DNS graph analysis
+    plus a different set of passive sources), so it often surfaces
+    subdomains subfinder doesn't. `amass enum`'s own -active/-brute flags
+    (zone transfers, cert grabs against the target's own infrastructure,
+    brute-force DNS) are never passed here — same passive-recon
+    classification as subfinder for that reason.
+
+    Unlike subfinder (JSON on stdout), amass only writes structured output
+    to a file inside -dir, so this needs the same mounted-volume pattern
+    as ZAP's packaged scans.
+    """
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        amass_minutes = max(1, settings.amass_timeout_seconds // 60)
+        cmd = [
+            "docker", "run", "--rm",
+            "-v", f"{Path(tmp_dir).resolve()}:/amass_out",
+            settings.amass_docker_image,
+            "enum", "-d", domain, "-dir", "/amass_out", "-timeout", str(amass_minutes),
+        ]
+        result = _run_docker(cmd, "amass", timeout=settings.amass_timeout_seconds)
+        output_path = Path(tmp_dir) / "amass.txt"
+        if result.returncode != 0 and not output_path.exists():
+            raise ToolError(f"amass failed (exit {result.returncode}): {result.stderr[-2000:]}")
+        if not output_path.exists():
+            return []
+
+        return _parse_amass_output(output_path.read_text(encoding="utf-8", errors="replace"), domain)
+
+
 def run_katana(url: str) -> list[dict]:
     """Web crawl via projectdiscovery/katana — read-only GET requests only,
     same passive-recon classification as httpx's single-page fingerprint."""

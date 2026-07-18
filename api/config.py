@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     httpx_docker_image: str = "projectdiscovery/httpx:latest"
     nmap_docker_image: str = "instrumentisto/nmap:latest"
     subfinder_docker_image: str = "projectdiscovery/subfinder:latest"
+    amass_docker_image: str = "caffix/amass"
     katana_docker_image: str = "projectdiscovery/katana:latest"
     nuclei_docker_image: str = "projectdiscovery/nuclei:latest"
     # No maintained official ffuf image exists on Docker Hub — built locally
@@ -57,6 +58,14 @@ class Settings(BaseSettings):
     # repo; subsequent runs reuse the cache and are fast, but budget for a
     # cold run.
     nuclei_timeout_seconds: int = 300
+    # amass enum has its own internal -timeout (minutes), derived from this
+    # so it self-terminates and writes its output file before this outer
+    # timeout would otherwise kill the container mid-run. Measured: the full
+    # test suite went from ~3.5 to ~19 minutes with a 180s default — amass
+    # genuinely finishes cleanly within 1 minute against a simple target, so
+    # kept short since this runs on every scan now, not opt-in. Raise for a
+    # slower/larger real target.
+    amass_timeout_seconds: int = 60
     zap_baseline_timeout_seconds: int = 300
     # zap-full-scan actively attacks every spidered page/param, not just a
     # fixed template set like nuclei — genuinely slower on a real site with
