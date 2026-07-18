@@ -86,6 +86,15 @@ write the findings, summary, and warnings to a Markdown file — useful for a
 bug bounty submission or client deliverable instead of copying terminal
 output. Findings are sorted by severity (critical first).
 
+Findings are also correlated before display: a real scan often has
+several tools flag the same underlying issue on the same URL (e.g.
+zap-baseline and zap-full-scan both noting a missing security header) —
+these merge into one entry noting which tools confirmed it, instead of
+listing the same issue N times. This is heuristic (URL + category
+matching), not certain — anything it can't confidently match, including
+`analyze`'s file-path-based semgrep findings, passes through unchanged
+rather than risking a wrong merge.
+
 ### Testing API endpoints specifically
 
 `scan`'s tools (katana, zap-baseline/full-scan, nuclei, ffuf, dalfox,

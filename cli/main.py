@@ -7,6 +7,7 @@ from rich.console import Console
 from rich.live import Live
 from rich.table import Table
 
+from api.correlate import correlate_findings
 from cli import launch as launch_lifecycle, server as server_lifecycle
 from cli.client import BASE_URL, SCAN_TIMEOUT, get as http_get, post
 from cli.report import render_markdown, write_report
@@ -128,7 +129,7 @@ def analyze(
     if result.get("error"):
         console.print(f"[yellow]Warning: {result['error']}[/yellow]")
 
-    findings = result["findings"]
+    findings = correlate_findings(result["findings"])
     if not findings:
         console.print("[green]No findings.[/green]")
     else:
@@ -270,7 +271,7 @@ def scan(
     for w in result["warnings"]:
         console.print(f"[yellow]{w}[/yellow]")
 
-    findings = result["findings"]
+    findings = correlate_findings(result["findings"])
     if not findings:
         console.print("[green]No findings.[/green]")
     else:
@@ -342,7 +343,7 @@ def scan_api(
     for w in result["warnings"]:
         console.print(f"[yellow]{w}[/yellow]")
 
-    findings = result["findings"]
+    findings = correlate_findings(result["findings"])
     if not findings:
         console.print("[green]No findings.[/green]")
     else:
