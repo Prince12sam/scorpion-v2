@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     # No maintained official ffuf image exists on Docker Hub — built locally
     # from source instead, see docker/tools/ffuf/Dockerfile.
     ffuf_docker_image: str = "scorpion/ffuf:local"
+    feroxbuster_docker_image: str = "epi052/feroxbuster"
     dalfox_docker_image: str = "hahwul/dalfox:latest"
     sqlmap_docker_image: str = "googlesky/sqlmap:latest"
     zap_docker_image: str = "zaproxy/zap-stable"
@@ -66,6 +67,15 @@ class Settings(BaseSettings):
     # kept short since this runs on every scan now, not opt-in. Raise for a
     # slower/larger real target.
     amass_timeout_seconds: int = 60
+    # feroxbuster is recursive by default (follows discovered directories
+    # rather than one flat pass like ffuf), so it can genuinely need more
+    # wall-clock than ffuf's tool_timeout_seconds against a deep site.
+    feroxbuster_timeout_seconds: int = 180
+    # feroxbuster's own per-request timeout (-T), separate from the outer
+    # container timeout above — its 7s default means every request against
+    # a dead/unreachable host waits the full 7s rather than failing fast,
+    # which adds up fast across a wordlist.
+    feroxbuster_request_timeout_seconds: int = 4
     zap_baseline_timeout_seconds: int = 300
     # zap-full-scan actively attacks every spidered page/param, not just a
     # fixed template set like nuclei — genuinely slower on a real site with

@@ -120,7 +120,7 @@ each discover subdomains independently (different passive data sources,
 so running both surfaces more real subdomains than either alone), httpx
 probes all of them (one batched call) to find which actually respond, and
 the rest of the pipeline (katana, zap-baseline, nmap, nuclei, ffuf,
-dalfox, sqlmap, zap-full-scan) runs once per live host — a discovered
+feroxbuster, dalfox, sqlmap, zap-full-scan) runs once per live host — a discovered
 `api.example.com` gets the same active scan as `example.com` itself, not
 just a line in a subdomain list. zap-full-scan is by far the slowest
 stage (it actively attacks every spidered page/param rather than a fixed

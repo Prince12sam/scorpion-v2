@@ -472,6 +472,48 @@ def run_ffuf(url: str) -> list[dict]:
     return findings
 
 
+def run_feroxbuster(url: str) -> list[dict]:
+    """Content/path discovery via epi052/feroxbuster — a different engine
+    than ffuf (recursive by default, follows discovered directories rather
+    than one flat pass), so it often surfaces different paths. Active-scan:
+    sends a request per wordlist entry, same classification as ffuf."""
+    wordlist_path = Path(settings.ffuf_wordlist_path).resolve()
+    if not wordlist_path.exists():
+        raise ToolError(f"wordlist not found: {wordlist_path}")
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        cmd = [
+            "docker", "run", "--rm",
+            "-v", f"{wordlist_path}:/wordlist.txt:ro",
+            "-v", f"{Path(tmp_dir).resolve()}:/out:rw",
+            settings.feroxbuster_docker_image,
+            "-u", url, "-w", "/wordlist.txt", "--json", "--silent", "-o", "/out/results.json",
+            "-T", str(settings.feroxbuster_request_timeout_seconds),
+        ]
+        result = _run_docker(cmd, "feroxbuster", timeout=settings.feroxbuster_timeout_seconds)
+        output_path = Path(tmp_dir) / "results.json"
+        if result.returncode != 0 and not output_path.exists():
+            raise ToolError(f"feroxbuster failed (exit {result.returncode}): {result.stderr[-2000:]}")
+        if not output_path.exists():
+            return []
+
+        findings = []
+        for row in _parse_json_lines(output_path.read_text(encoding="utf-8", errors="replace")):
+            if row.get("type") != "response":
+                continue
+            findings.append(
+                {
+                    "source_tool": "feroxbuster",
+                    "severity": "info",
+                    "title": f"found: {row.get('url', '')}",
+                    "description": f"status={row.get('status')} length={row.get('content_length')}",
+                    "file_path": None,
+                    "line": None,
+                }
+            )
+        return findings
+
+
 def run_dalfox(url: str) -> list[dict]:
     """XSS scan via hahwul/dalfox. Active-scan: injects payloads."""
     cmd = [

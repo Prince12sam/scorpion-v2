@@ -17,6 +17,7 @@ from api.tool_router import (
     _parse_amass_output,
     run_amass,
     run_dalfox,
+    run_feroxbuster,
     run_ffuf,
     run_katana,
     run_nuclei,
@@ -107,6 +108,18 @@ def test_ffuf_finds_a_known_path():
         httpd.shutdown()
         tmpdir.cleanup()
     assert any("robots.txt" in f["title"] for f in findings)
+
+
+def test_feroxbuster_finds_a_known_path():
+    port = 8801
+    httpd, tmpdir = _start_http_server(port)
+    try:
+        findings = run_feroxbuster(f"http://{TARGET_HOST}:{port}")
+    finally:
+        httpd.shutdown()
+        tmpdir.cleanup()
+    assert any("robots.txt" in f["title"] for f in findings)
+    assert all(f["source_tool"] == "feroxbuster" for f in findings)
 
 
 def test_nuclei_runs_a_real_scan_cleanly():

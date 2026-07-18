@@ -47,6 +47,7 @@ from api.tool_router import (
     ToolError,
     run_amass,
     run_dalfox,
+    run_feroxbuster,
     run_ffuf,
     run_httpx,
     run_katana,
@@ -92,6 +93,10 @@ PIPELINE: list[ToolStage] = [
     ToolStage(name="nmap", action_class=ACTIVE_SCAN, runner=run_nmap, target_form="host"),
     ToolStage(name="nuclei", action_class=ACTIVE_SCAN, runner=run_nuclei, target_form="url"),
     ToolStage(name="ffuf", action_class=ACTIVE_SCAN, runner=run_ffuf, target_form="url"),
+    # A different engine than ffuf (recursive by default — follows
+    # discovered directories rather than one flat pass), so it often
+    # surfaces different paths.
+    ToolStage(name="feroxbuster", action_class=ACTIVE_SCAN, runner=run_feroxbuster, target_form="url"),
     ToolStage(name="dalfox", action_class=ACTIVE_SCAN, runner=run_dalfox, target_form="url"),
     ToolStage(
         name="sqlmap", action_class=ACTIVE_SCAN, runner=run_sqlmap, target_form="url", escalation_class=EXPLOITATION
