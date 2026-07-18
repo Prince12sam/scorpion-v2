@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     dalfox_docker_image: str = "hahwul/dalfox:latest"
     sqlmap_docker_image: str = "googlesky/sqlmap:latest"
     zap_docker_image: str = "zaproxy/zap-stable"
+    # Published under GitHub Container Registry, not Docker Hub — the
+    # sullo/nikto Docker Hub name that's often referenced doesn't exist.
+    nikto_docker_image: str = "ghcr.io/sullo/nikto"
 
     tool_timeout_seconds: int = 180
     # nuclei's first run per template-cache-volume downloads the templates
@@ -76,6 +79,10 @@ class Settings(BaseSettings):
     # a dead/unreachable host waits the full 7s rather than failing fast,
     # which adds up fast across a wordlist.
     feroxbuster_request_timeout_seconds: int = 4
+    # Nikto's -maxtime is derived from this, leaving a 30s buffer so it
+    # self-terminates and still writes a valid report before this outer
+    # timeout would otherwise kill the container mid-run.
+    nikto_timeout_seconds: int = 600
     zap_baseline_timeout_seconds: int = 300
     # zap-full-scan actively attacks every spidered page/param, not just a
     # fixed template set like nuclei — genuinely slower on a real site with

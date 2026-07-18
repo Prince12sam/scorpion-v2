@@ -20,6 +20,7 @@ from api.tool_router import (
     run_feroxbuster,
     run_ffuf,
     run_katana,
+    run_nikto,
     run_nuclei,
     run_sqlmap,
     run_subfinder,
@@ -120,6 +121,21 @@ def test_feroxbuster_finds_a_known_path():
         tmpdir.cleanup()
     assert any("robots.txt" in f["title"] for f in findings)
     assert all(f["source_tool"] == "feroxbuster" for f in findings)
+
+
+def test_nikto_runs_a_real_scan_cleanly():
+    port = 8802
+    httpd, tmpdir = _start_http_server(port)
+    try:
+        findings = run_nikto(f"http://{TARGET_HOST}:{port}")
+    finally:
+        httpd.shutdown()
+        tmpdir.cleanup()
+    # A static file server should trip Nikto's header/hygiene checks (no
+    # security headers set), same reasoning as the ZAP baseline test —
+    # this asserts real findings parsed cleanly, not that it's empty.
+    assert len(findings) > 0
+    assert all(f["source_tool"] == "nikto" for f in findings)
 
 
 def test_nuclei_runs_a_real_scan_cleanly():

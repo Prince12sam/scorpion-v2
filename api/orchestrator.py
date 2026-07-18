@@ -51,6 +51,7 @@ from api.tool_router import (
     run_ffuf,
     run_httpx,
     run_katana,
+    run_nikto,
     run_nmap,
     run_nuclei,
     run_sqlmap,
@@ -92,6 +93,11 @@ PIPELINE: list[ToolStage] = [
     ToolStage(name="zap-baseline", action_class=PASSIVE_RECON, runner=run_zap_baseline, target_form="url"),
     ToolStage(name="nmap", action_class=ACTIVE_SCAN, runner=run_nmap, target_form="host"),
     ToolStage(name="nuclei", action_class=ACTIVE_SCAN, runner=run_nuclei, target_form="url"),
+    # A large, long-established signature database distinct from nuclei's
+    # template-based approach — different (often more hygiene/config-
+    # focused) findings. DoS-category checks are always excluded, no
+    # matter what scope authorizes.
+    ToolStage(name="nikto", action_class=ACTIVE_SCAN, runner=run_nikto, target_form="url"),
     ToolStage(name="ffuf", action_class=ACTIVE_SCAN, runner=run_ffuf, target_form="url"),
     # A different engine than ffuf (recursive by default — follows
     # discovered directories rather than one flat pass), so it often

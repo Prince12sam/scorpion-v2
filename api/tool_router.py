@@ -514,6 +514,59 @@ def run_feroxbuster(url: str) -> list[dict]:
         return findings
 
 
+def run_nikto(url: str) -> list[dict]:
+    """Web server misconfiguration/vulnerability scan via ghcr.io/sullo/nikto
+    — a large, long-established signature database distinct from nuclei's
+    template-based approach, so it surfaces different (often more
+    hygiene/config-focused: missing headers, outdated server banners,
+    default files) findings. `-Tuning x6` always excludes DoS-category
+    checks regardless of authorization — that's a hard line, not a
+    configurable option. `-ask no` suppresses an interactive prompt Nikto
+    otherwise shows about submitting update info to CIRT.net (confirmed
+    for real: it appears after every run). Active-scan: sends real
+    requests against every check in its database.
+    """
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        # Nikto's own -maxtime lets it self-terminate and still write a
+        # valid report before the outer container timeout would otherwise
+        # kill it mid-run — same reasoning as amass's -timeout above.
+        maxtime = max(30, settings.nikto_timeout_seconds - 30)
+        cmd = [
+            "docker", "run", "--rm",
+            "-v", f"{Path(tmp_dir).resolve()}:/out:rw",
+            settings.nikto_docker_image,
+            "-h", url, "-Tuning", "x6", "-Format", "json", "-o", "/out/nikto.json",
+            "-maxtime", f"{maxtime}s", "-ask", "no",
+        ]
+        result = _run_docker(cmd, "nikto", timeout=settings.nikto_timeout_seconds)
+        output_path = Path(tmp_dir) / "nikto.json"
+        if result.returncode != 0 and not output_path.exists():
+            raise ToolError(f"nikto failed (exit {result.returncode}): {result.stderr[-2000:]}")
+        if not output_path.exists():
+            return []
+
+        try:
+            data = json.loads(output_path.read_text(encoding="utf-8", errors="replace"))
+        except json.JSONDecodeError as exc:
+            raise ToolError(f"could not parse nikto output: {exc}") from exc
+
+        findings = []
+        for host_entry in data:
+            for vuln in host_entry.get("vulnerabilities", []) or []:
+                msg = vuln.get("msg", "")
+                findings.append(
+                    {
+                        "source_tool": "nikto",
+                        "severity": "info",
+                        "title": msg[:200] if msg else "nikto-finding",
+                        "description": f"{vuln.get('method', '')} {vuln.get('url', '')} — {msg}".strip(),
+                        "file_path": None,
+                        "line": None,
+                    }
+                )
+        return findings
+
+
 def run_dalfox(url: str) -> list[dict]:
     """XSS scan via hahwul/dalfox. Active-scan: injects payloads."""
     cmd = [
