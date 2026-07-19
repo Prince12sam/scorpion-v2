@@ -194,6 +194,89 @@ consecutive steps that found nothing new — whichever comes first. Because
 it's an extra LLM-driven phase on top of an already-thorough fixed
 pipeline, expect real added time; it's opt-in for that reason.
 
+#### Trying it locally
+
+`scorpion launch` builds and starts `browser_sandbox` alongside
+Postgres/Metasploit — confirm it actually came up before testing anything
+else:
+
+```
+docker compose -f docker/docker-compose.yml ps    # look for scorpion_browser_sandbox
+curl http://localhost:9223/json/version            # Linux/Mac — real Chrome DevTools JSON back
+curl.exe http://localhost:9223/json/version        # Windows PowerShell — curl.exe forces the
+                                                    # real curl, not the Invoke-WebRequest alias
+```
+
+A blank page has nothing interesting for the adaptive loop to act on — spin
+up a page with an actual form and link first:
+
+```python
+# test_page.py
+import http.server
+port = 8900
+html = b"""<html><body>
+<h1>Test Site</h1>
+<a href="/admin">Admin Panel</a>
+<form action="/login" method="POST">
+  <input name="username"><input type="password" name="password">
+  <button>Login</button>
+</form>
+</body></html>"""
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200); self.send_header("Content-Type","text/html"); self.end_headers()
+        self.wfile.write(html)
+
+http.server.ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+```
+
+```
+python3 test_page.py &                              # Linux/Mac — background job
+Start-Process python -ArgumentList "test_page.py"    # Windows PowerShell — separate process
+```
+
+Then, since `localhost` auto-verifies (no scope prompt needed):
+
+```
+scorpion scan localhost --adaptive --report test_report.md
+```
+
+Watch the live progress line — it shows the fixed pipeline's stages
+first, then `adaptive: deciding next step`, `adaptive: browser_navigate`,
+etc. once that phase starts. Open `test_report.md` afterward for
+`[browser]`-tagged findings (discovered form, extracted page text) and
+the "Methodology" section. If `SCORPION_CODING_MODELS` isn't configured,
+the adaptive phase fails closed to "done" immediately (zero adaptive
+steps, no error) — check that first if you see nothing from it.
+
+To see the state-changing actions (`browser_click`/`browser_fill`)
+actually execute instead of reporting `skipped — ... not authorized for
+action 'exploitation'`, authorize a SOW against the same target first:
+
+```
+echo "This SOW authorizes penetration testing of localhost, including exploitation to confirm real impact." > sow.txt
+scorpion authorize-sow localhost sow.txt
+scorpion scan localhost --adaptive --report test_report2.md
+```
+
+(Windows PowerShell: write `sow.txt` with a here-string instead of
+`echo >`, to guarantee plain UTF-8 without a stray BOM —
+`@'...'@ | Out-File -FilePath sow.txt -Encoding utf8NoBOM`.)
+
+Debugging what the sandboxed browser actually did:
+
+```
+docker logs -f scorpion_browser_sandbox   # Chrome/Xvfb's own logs (the dbus
+                                           # errors in there are harmless noise)
+```
+
+`browser_screenshot` findings write a real PNG to your OS's temp dir —
+the `file_path` in that finding is directly openable (e.g.
+`/tmp/scorpion-browser-*.png` on Linux/Mac, `$env:TEMP\scorpion-browser-*.png`
+on Windows). There's no live-view/VNC yet — extracted text/forms and
+screenshots are the only ways to see what it did.
+
 ## Scanning a target you don't own
 
 `scan` only runs against targets a scope gate has verified — a
@@ -228,11 +311,13 @@ authorize something you're actually allowed to test.
   it), sqlmap escalates to enumerate the current database, DBMS version
   banner, and available database names — proof of impact, never full data
   extraction (`--dump`) or shell access, which this doesn't implement.
-  Self-attestation and file-token verification can never grant this tier;
-  ambiguous SOW language ("penetration test" alone) doesn't either — it
-  fails closed. Requires an LLM configured. The full SOW text is stored
-  against the target, same accountability principle as a logged
-  self-attestation statement.
+  This is also the only way `scan --adaptive`'s state-changing browser
+  actions (`browser_click`/`browser_fill`) run instead of reporting
+  skipped — same tier, same reasoning. Self-attestation and file-token
+  verification can never grant this tier; ambiguous SOW language
+  ("penetration test" alone) doesn't either — it fails closed. Requires
+  an LLM configured. The full SOW text is stored against the target, same
+  accountability principle as a logged self-attestation statement.
 
 ## Without an LLM key configured
 
