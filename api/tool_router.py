@@ -970,3 +970,151 @@ def run_testssl(url: str) -> list[dict]:
                 }
             )
         return findings
+
+
+def _wpscan_dict_or_list(value) -> list:
+    """WPScan's JSON has several sections (plugins/themes keyed by slug,
+    config_backups/db_exports/backup_folders shaped less predictably) —
+    handles both a dict-of-entries and a plain list without guessing wrong."""
+    if isinstance(value, dict):
+        return list(value.items())
+    if isinstance(value, list):
+        return list(enumerate(value))
+    return []
+
+
+def run_wpscan(url: str) -> list[dict]:
+    """WordPress-specific vulnerability/enumeration scan via wpscanteam/wpscan
+    — installed plugins/themes/users, exposed config backups/db exports/
+    backup folders, and (with an optional free API token) known CVEs for
+    what it finds. A large fraction of real-world web targets run
+    WordPress; nuclei/zap catch some of this generically but WPScan's
+    WordPress-specific database and enumeration goes much deeper.
+    --force skips the "is this really WordPress" check so it doesn't
+    silently no-op on a false negative. Active-scan: sends real requests
+    probing plugin/theme/backup paths.
+    """
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        report_name = "wpscan.json"
+        # vp/vt (vulnerable plugins/themes) require an API token or wpscan
+        # aborts outright — confirmed for real. ap/at (all plugins/themes)
+        # brute-forces a huge slug dictionary and measured 10+ minutes even
+        # against a nearly-empty test site — dropped from the default for
+        # the same reason feroxbuster/amass/testssl got their own timing
+        # fixes earlier: an unbounded per-stage cost that's easy to miss
+        # until it's already blown the scan's time budget. tt/cb/dbe/bf/u
+        # (timthumbs, config backups, db exports, backup folders, user
+        # IDs) are all fast, direct-detection checks with real value —
+        # confirmed finding a real enumerated username in ~7s.
+        enumerate_opts = "vp,vt,tt,cb,dbe,bf,u1-10" if settings.wpscan_api_token else "tt,cb,dbe,bf,u1-10"
+        cmd = [
+            "docker", "run", "--rm",
+            "-v", f"{Path(tmp_dir).resolve()}:/out:rw",
+            settings.wpscan_docker_image,
+            "--url", url, "--force", "-e", enumerate_opts, "-f", "json", "-o", f"/out/{report_name}",
+        ]
+        if settings.wpscan_api_token:
+            cmd += ["--api-token", settings.wpscan_api_token]
+
+        result = _run_docker(cmd, "wpscan", timeout=settings.wpscan_timeout_seconds)
+        report_path = Path(tmp_dir) / report_name
+        if result.returncode != 0 and not report_path.exists():
+            raise ToolError(f"wpscan failed (exit {result.returncode}): {result.stderr[-2000:]}")
+        if not report_path.exists():
+            return []
+
+        try:
+            data = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))
+        except json.JSONDecodeError as exc:
+            raise ToolError(f"could not parse wpscan output: {exc}") from exc
+
+        if data.get("scan_aborted"):
+            # --force still lets wpscan abort mid-scan when an enumeration
+            # mode (tt/cb/dbe/bf/u) can't locate wp-content — confirmed for
+            # real against a genuinely non-WordPress target. That's a benign
+            # "this isn't WordPress" signal, not a tool failure, so it's
+            # treated the same as not_fully_configured below rather than
+            # raised — there's no reliable way to enumerate every possible
+            # abort message and distinguish "not WordPress" from a real
+            # connectivity problem, and _run_docker already raises ToolError
+            # separately for a genuine container/exit-code failure.
+            return []
+        if data.get("not_fully_configured"):
+            return []
+
+        findings = []
+        for item in data.get("interesting_findings", []) or []:
+            # `to_s` alone is sometimes just a generic label (e.g. "Headers")
+            # — confirmed for real that the actual detail (header names/
+            # values, etc.) lives in interesting_entries instead.
+            entries = item.get("interesting_entries") or []
+            desc = item.get("to_s", "")
+            if entries:
+                desc = f"{desc} — {'; '.join(entries)}" if desc else "; ".join(entries)
+            findings.append(
+                {
+                    "source_tool": "wpscan",
+                    "severity": "info",
+                    "title": f"{item.get('type', 'finding')}: {item.get('url', '')}",
+                    "description": desc,
+                    "file_path": None,
+                    "line": None,
+                }
+            )
+
+        for category, label in (
+            ("config_backups", "exposed config backup"),
+            ("db_exports", "exposed database export"),
+            ("backup_folders", "exposed backup folder"),
+        ):
+            for key, entry in _wpscan_dict_or_list(data.get(category)):
+                desc = entry.get("to_s", str(entry)) if isinstance(entry, dict) else str(entry)
+                findings.append(
+                    {
+                        "source_tool": "wpscan",
+                        "severity": "high",
+                        "title": f"{label}: {key}",
+                        "description": desc,
+                        "file_path": None,
+                        "line": None,
+                    }
+                )
+
+        for kind, section in (("plugin", "plugins"), ("theme", "themes")):
+            for slug, entry in _wpscan_dict_or_list(data.get(section)):
+                if not isinstance(entry, dict):
+                    continue
+                vulns = entry.get("vulnerabilities") or []
+                outdated = entry.get("outdated", False)
+                severity = "high" if vulns else ("medium" if outdated else "info")
+                desc = f"version={entry.get('version') or 'unknown'} outdated={outdated}"
+                if vulns:
+                    titles = "; ".join(v.get("title", "") for v in vulns[:3])
+                    desc += f" — {len(vulns)} known vulnerabilit{'y' if len(vulns) == 1 else 'ies'}: {titles}"
+                findings.append(
+                    {
+                        "source_tool": "wpscan",
+                        "severity": severity,
+                        "title": f"{kind} detected: {slug}",
+                        "description": desc,
+                        "file_path": None,
+                        "line": None,
+                    }
+                )
+
+        # Keyed by username, not by ID — confirmed against real output:
+        # {"admin": {"id": 1, "found_by": ..., ...}}.
+        for username, user in _wpscan_dict_or_list(data.get("users")):
+            user_id = user.get("id") if isinstance(user, dict) else None
+            findings.append(
+                {
+                    "source_tool": "wpscan",
+                    "severity": "info",
+                    "title": f"user enumerated: {username}",
+                    "description": f"user id {user_id}" if user_id is not None else str(user),
+                    "file_path": None,
+                    "line": None,
+                }
+            )
+
+        return findings

@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     # sullo/nikto Docker Hub name that's often referenced doesn't exist.
     nikto_docker_image: str = "ghcr.io/sullo/nikto"
     testssl_docker_image: str = "drwetter/testssl.sh"
+    wpscan_docker_image: str = "wpscanteam/wpscan"
+    # Optional — get a free token (25 req/day) at https://wpscan.com/register.
+    # Without one, plugin/theme enumeration still runs (all-plugins/themes
+    # detection, not just known-vulnerable ones) but without CVE cross-referencing.
+    wpscan_api_token: str = ""
 
     tool_timeout_seconds: int = 180
     # nuclei's first run per template-cache-volume downloads the templates
@@ -85,6 +90,11 @@ class Settings(BaseSettings):
     # timeout would otherwise kill the container mid-run.
     nikto_timeout_seconds: int = 600
     testssl_timeout_seconds: int = 180
+    # Default enumeration (timthumbs/config-backups/db-exports/backup-
+    # folders/user-IDs, no full plugin/theme brute force — see run_wpscan)
+    # measured ~7s against a near-empty test site; budget more for a real
+    # site with more redirects/content.
+    wpscan_timeout_seconds: int = 180
     zap_baseline_timeout_seconds: int = 300
     # zap-full-scan actively attacks every spidered page/param, not just a
     # fixed template set like nuclei — genuinely slower on a real site with

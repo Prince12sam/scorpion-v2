@@ -2,9 +2,9 @@
 
 Scorpion is a local-first AI security platform: a Coding Agent (`analyze`/`fix`)
 and a Pentest Agent (`scan`, chaining httpx, subfinder, amass, katana, nmap,
-nuclei, nikto, ffuf, feroxbuster, dalfox, sqlmap, OWASP ZAP, and a Metasploit
-auxiliary/scanner module) behind one CLI, with an LLM router that works with
-either a cloud provider or a local model (Ollama).
+nuclei, nikto, testssl.sh, WPScan, ffuf, feroxbuster, dalfox, sqlmap, OWASP
+ZAP, and a Metasploit auxiliary/scanner module) behind one CLI, with an LLM
+router that works with either a cloud provider or a local model (Ollama).
 
 Written and verified on Windows and Linux — see docs/WINDOWS.md /
 docs/LINUX.md for what's different (and what actually went wrong and got
@@ -124,12 +124,16 @@ each discover subdomains independently (different passive data sources,
 so running both surfaces more real subdomains than either alone), httpx
 probes all of them (one batched call) to find which actually respond, and
 the rest of the pipeline (katana, zap-baseline, nmap, nuclei, nikto,
-msf-http-version, testssl, ffuf, feroxbuster, dalfox, sqlmap, zap-full-scan)
-runs once per live host — a discovered `api.example.com` gets the same
-active scan as `example.com` itself, not just a line in a subdomain list.
+msf-http-version, testssl, wpscan, ffuf, feroxbuster, dalfox, sqlmap,
+zap-full-scan) runs once per live host — a discovered `api.example.com`
+gets the same active scan as `example.com` itself, not just a line in a
+subdomain list.
 `testssl` (TLS/SSL configuration + known-vulnerability checks) only runs
 when the live host actually responded over HTTPS — it's skipped instantly,
-not just quickly, for a plain-HTTP host.
+not just quickly, for a plain-HTTP host. `wpscan` (WordPress-specific
+plugin/theme/user enumeration and known-CVE lookups, with an optional free
+API token — `SCORPION_WPSCAN_API_TOKEN`) degrades to no findings just as
+quickly against anything that isn't actually WordPress.
 zap-full-scan is by far the slowest stage (it actively attacks every
 spidered page/param rather than a fixed template set) — expect several
 extra minutes per host versus nuclei alone. `msf-http-version` needs

@@ -58,6 +58,7 @@ from api.tool_router import (
     run_sqlmap,
     run_subfinder,
     run_testssl,
+    run_wpscan,
     run_zap_baseline,
     run_zap_full_scan,
 )
@@ -109,6 +110,9 @@ PIPELINE: list[ToolStage] = [
     # No-ops instantly (no Docker invocation at all) for a plain-HTTP live
     # host — only runs when the URL httpx actually found live is https://.
     ToolStage(name="testssl", action_class=ACTIVE_SCAN, runner=run_testssl, target_form="url"),
+    # No-ops gracefully (returns []) against anything that isn't genuinely
+    # WordPress — see run_wpscan's scan_aborted handling.
+    ToolStage(name="wpscan", action_class=ACTIVE_SCAN, runner=run_wpscan, target_form="url"),
     ToolStage(name="ffuf", action_class=ACTIVE_SCAN, runner=run_ffuf, target_form="url"),
     # A different engine than ffuf (recursive by default — follows
     # discovered directories rather than one flat pass), so it often

@@ -28,6 +28,7 @@ from api.tool_router import (
     run_sqlmap,
     run_subfinder,
     run_testssl,
+    run_wpscan,
     run_zap_api_scan,
     run_zap_baseline,
     run_zap_full_scan,
@@ -402,6 +403,26 @@ def test_testssl_runs_cleanly_against_a_plain_http_host():
     httpd, tmpdir = _start_http_server(port)
     try:
         findings = run_testssl(f"http://{TARGET_HOST}:{port}")
+    finally:
+        httpd.shutdown()
+        tmpdir.cleanup()
+    assert findings == []
+
+
+def test_wpscan_runs_cleanly_against_a_non_wordpress_host():
+    # Real WordPress-specific findings (detected plugins, enumerated
+    # users, config/db backup exposure) were verified manually during
+    # development against a real, freshly-installed WordPress instance
+    # (wordpress + mariadb containers) — not repeated here as a permanent
+    # fixture, since standing up a full CMS+DB pair for one test is a
+    # heavy, fragile addition to this suite. This asserts the tool_router
+    # <-> container <-> JSON-parsing plumbing works cleanly against a
+    # target that isn't WordPress at all, same "runs cleanly" pattern as
+    # nuclei/dalfox/sqlmap elsewhere in this file.
+    port = 8809
+    httpd, tmpdir = _start_http_server(port)
+    try:
+        findings = run_wpscan(f"http://{TARGET_HOST}:{port}")
     finally:
         httpd.shutdown()
         tmpdir.cleanup()

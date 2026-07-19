@@ -2,9 +2,11 @@
 
 Scorpion is a local-first AI security platform: a Coding Agent (`analyze`/`fix`,
 security-focused static review + LLM-assisted patching) and a Pentest
-Agent (`scan`, chaining httpx, subfinder, katana, nmap, nuclei, ffuf,
-dalfox, sqlmap, and OWASP ZAP) behind one CLI, orchestrated by an LLM
-router that works with either a cloud provider or a local model (Ollama).
+Agent (`scan`, chaining httpx, subfinder, amass, katana, nmap, nuclei,
+nikto, testssl.sh, WPScan, ffuf, feroxbuster, dalfox, sqlmap, OWASP ZAP,
+and a Metasploit auxiliary/scanner module) behind one CLI, orchestrated by
+an LLM router that works with either a cloud provider or a local model
+(Ollama).
 
 `scan` doesn't just check the one host you give it — it enumerates
 subdomains, probes which are actually live, and runs the full active-scan
