@@ -66,6 +66,42 @@ def _ensure_postgres() -> Step:
     return False, "Postgres started but did not report healthy in time — check `docker compose logs`."
 
 
+def _msf_rpc_ready() -> bool:
+    from api.msf_client import MsfRpcClient, MsfRpcError
+
+    try:
+        MsfRpcClient().login()
+        return True
+    except MsfRpcError:
+        return False
+
+
+def _ensure_msf_services() -> Step:
+    """Best-effort, never blocks the rest of launch(): docker compose up -d
+    (in _ensure_postgres above) already started msf_postgres/msf_rpc
+    alongside es_postgres, since they're all in the same compose file —
+    this just waits for msfrpcd to actually finish loading. It's a heavy
+    Rails app, genuinely slower than Postgres to become ready. If it's
+    still not up by the time this returns, that's reported here but always
+    as ok=True — a scan's msf-http-version stage degrades to a skipped/
+    failed warning on its own if msfrpcd isn't reachable yet, the same way
+    any other tool failure is handled, so this was never a reason to block
+    the Agent Core from starting.
+    """
+    if _msf_rpc_ready():
+        return True, "Metasploit RPC (msfrpcd) already healthy."
+
+    for _ in range(30):
+        if _msf_rpc_ready():
+            return True, "Metasploit RPC (msfrpcd) started and healthy."
+        time.sleep(2)
+    return True, (
+        "Metasploit RPC (msfrpcd) not ready yet — it's a heavy Rails app, can take a "
+        "minute+ on first start. scan's msf-http-version stage will report skipped "
+        "until it is; check `docker compose logs msf_rpc` if it never comes up."
+    )
+
+
 def _ffuf_image_exists() -> bool:
     result = subprocess.run(["docker", "image", "inspect", settings.ffuf_docker_image], capture_output=True)
     return result.returncode == 0
@@ -110,6 +146,8 @@ def launch() -> list[Step]:
     steps.append((ok, msg))
     if not ok:
         return steps
+
+    steps.append(_ensure_msf_services())
 
     ok, msg = server_lifecycle.start()
     steps.append((ok, msg))

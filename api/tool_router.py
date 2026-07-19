@@ -3,10 +3,12 @@ import re
 import subprocess
 import sys
 import tempfile
+import urllib.parse
 import uuid
 from pathlib import Path
 
 from api.config import settings
+from api.msf_client import MsfRpcClient, MsfRpcError
 
 
 class ToolError(Exception):
@@ -838,3 +840,53 @@ def run_zap_api_scan(
             raise ToolError(f"zap-api-scan failed (exit {result.returncode}): {result.stderr[-2000:]}")
 
         return _parse_zap_report(report_path, "zap-api-scan")
+
+
+def run_msf_http_version(url: str) -> list[dict]:
+    """HTTP service/version detection via Metasploit's
+    auxiliary/scanner/http/http_version module — a third independent
+    fingerprinting engine alongside httpx/nikto, run through msfrpcd (a
+    long-lived RPC daemon started via `scorpion launch`, not a one-shot
+    container like every other tool here — see docker/docker-compose.yml's
+    msf_rpc service).
+
+    This is the ONLY Metasploit module ever exposed here, by design: a
+    real, read-only auxiliary/scanner module, never a user-suppliable
+    module name and never exploit/* modules (which need their own
+    separate, more-guarded design — session handling, cleanup guarantees —
+    this doesn't implement). Active-scan: sends a real HTTP request to the
+    target, same classification as httpx.
+    """
+    parsed = urllib.parse.urlsplit(url if "://" in url else f"http://{url}")
+    host = parsed.hostname
+    if not host:
+        raise ToolError(f"could not extract a host from {url!r}")
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+
+    client = MsfRpcClient()
+    try:
+        result = client.run_auxiliary_module("scanner/http/http_version", {"RHOSTS": host, "RPORT": port})
+    except MsfRpcError as exc:
+        raise ToolError(f"metasploit http_version failed: {exc}") from exc
+
+    if result.get("status") != "completed":
+        raise ToolError(f"metasploit http_version did not complete: {result}")
+
+    service = result.get("result") or {}
+    if not service:
+        return []
+
+    proto = service.get("proto", "tcp")
+    port_val = service.get("port", port)
+    name = service.get("name", "http")
+    info = service.get("info", "") or ""
+    return [
+        {
+            "source_tool": "metasploit",
+            "severity": "info",
+            "title": f"{proto}/{port_val} {name} ({service.get('state', 'open')})",
+            "description": info or f"detected via auxiliary/scanner/http/http_version @ {host}:{port_val}",
+            "file_path": None,
+            "line": None,
+        }
+    ]

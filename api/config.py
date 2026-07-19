@@ -105,6 +105,21 @@ class Settings(BaseSettings):
     # actively scanned; a warning says how many were dropped.
     max_enumerated_hosts: int = 5
 
+    # Metasploit RPC (msfrpcd) — a long-lived service started once via
+    # `scorpion launch` (docker/docker-compose.yml's msf_rpc), unlike every
+    # other tool here which runs as a one-shot container. Only vetted
+    # auxiliary/scanner modules are ever run through this (see
+    # api/tool_router.py) — never arbitrary module names, and never
+    # exploit/* modules, which would need their own separate, more-guarded
+    # design (session handling, cleanup guarantees) this doesn't implement.
+    msf_rpc_host: str = "localhost"
+    msf_rpc_port: int = 55553
+    msf_rpc_user: str = "msf"
+    msf_rpc_password: str = ""
+    # Wall-clock budget for a module run to finish (poll module.running_stats
+    # until the job leaves running/waiting), not msfrpcd's own timeout.
+    msf_module_timeout_seconds: int = 120
+
     # Every target must reach `verified` status via api/scope.py before any
     # active-scan tool call — see docs/SECURITY_AND_AUTHORIZATION.md.
     scope_verification_ttl_days: int = 30

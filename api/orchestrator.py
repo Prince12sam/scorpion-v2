@@ -51,6 +51,7 @@ from api.tool_router import (
     run_ffuf,
     run_httpx,
     run_katana,
+    run_msf_http_version,
     run_nikto,
     run_nmap,
     run_nuclei,
@@ -98,6 +99,12 @@ PIPELINE: list[ToolStage] = [
     # focused) findings. DoS-category checks are always excluded, no
     # matter what scope authorizes.
     ToolStage(name="nikto", action_class=ACTIVE_SCAN, runner=run_nikto, target_form="url"),
+    # A third independent fingerprinting engine (via msfrpcd, a long-lived
+    # RPC daemon — see docker/docker-compose.yml's msf_rpc service — not a
+    # one-shot container like every other stage here). Only this one
+    # vetted auxiliary/scanner module is ever run; see run_msf_http_version's
+    # docstring for why nothing broader is exposed.
+    ToolStage(name="msf-http-version", action_class=ACTIVE_SCAN, runner=run_msf_http_version, target_form="url"),
     ToolStage(name="ffuf", action_class=ACTIVE_SCAN, runner=run_ffuf, target_form="url"),
     # A different engine than ffuf (recursive by default — follows
     # discovered directories rather than one flat pass), so it often

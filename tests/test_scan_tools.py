@@ -20,6 +20,7 @@ from api.tool_router import (
     run_feroxbuster,
     run_ffuf,
     run_katana,
+    run_msf_http_version,
     run_nikto,
     run_nuclei,
     run_sqlmap,
@@ -320,3 +321,32 @@ def test_zap_api_scan_reaches_an_endpoint_only_the_spec_declares():
         tmpdir.cleanup()
 
     assert all(f["source_tool"] == "zap-api-scan" for f in findings)
+
+
+def test_msf_http_version_detects_a_real_service():
+    """Requires msfrpcd up (scorpion launch / docker compose up msf_rpc).
+    Skips rather than fails if it isn't reachable, since this is the one
+    tool that depends on a separately-managed long-lived service instead
+    of spinning up its own container per call."""
+    from api.msf_client import MsfRpcClient, MsfRpcError
+
+    try:
+        MsfRpcClient().login()
+    except MsfRpcError:
+        import pytest
+
+        pytest.skip("msfrpcd not reachable — run `scorpion launch` or `docker compose up msf_rpc` first")
+
+    port = 8803
+    httpd, tmpdir = _start_http_server(port)
+    try:
+        findings = run_msf_http_version(f"http://{TARGET_HOST}:{port}")
+    finally:
+        httpd.shutdown()
+        tmpdir.cleanup()
+
+    assert len(findings) == 1
+    assert findings[0]["source_tool"] == "metasploit"
+    # Confirmed for real: Python's SimpleHTTPRequestHandler's banner gets
+    # picked up by http_version's own detection, not something we inject.
+    assert "SimpleHTTP" in findings[0]["description"]

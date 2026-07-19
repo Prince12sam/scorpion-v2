@@ -18,5 +18,56 @@ services:
       timeout: 5s
       retries: 10
 
+  # Metasploit's RPC daemon needs its own dedicated Postgres — its schema
+  # is Metasploit's own (hosts/services/vulns/notes/loot tables), separate
+  # from Scorpion's own Memory DB above. Never share the two.
+  msf_postgres:
+    image: postgres:16-alpine
+    container_name: scorpion_msf_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${MSF_PG_USER:-msf}
+      POSTGRES_PASSWORD: ${MSF_PG_PASSWORD:?set MSF_PG_PASSWORD in docker/.env}
+      POSTGRES_DB: ${MSF_PG_DB:-msf}
+    volumes:
+      - msf_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MSF_PG_USER:-msf} -d ${MSF_PG_DB:-msf}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Long-lived RPC daemon, unlike every other scan tool (which run as
+  # one-shot `docker run --rm` containers) — msfrpcd needs to stay running
+  # to accept RPC calls, so it's started once via `scorpion launch` like
+  # Postgres, not spun up per-scan. `-S` (no SSL) is a deliberate
+  # simplification: this only ever talks to the Agent Core over the local
+  # Docker network/localhost, never an untrusted network — same trust
+  # boundary already accepted for the plaintext Postgres connection above.
+  msf_rpc:
+    image: metasploitframework/metasploit-framework
+    container_name: scorpion_msf_rpc
+    restart: unless-stopped
+    depends_on:
+      msf_postgres:
+        condition: service_healthy
+    environment:
+      MSF_PG_USER: ${MSF_PG_USER:-msf}
+      MSF_PG_PASSWORD: ${MSF_PG_PASSWORD:?set MSF_PG_PASSWORD in docker/.env}
+      MSF_PG_DB: ${MSF_PG_DB:-msf}
+      MSF_RPC_USER: ${MSF_RPC_USER:-msf}
+      MSF_RPC_PASSWORD: ${MSF_RPC_PASSWORD:?set MSF_RPC_PASSWORD in docker/.env}
+      # database.yml only defines a "production" key — Rails defaults to
+      # "development" otherwise and fails with AdapterNotSpecified.
+      RAILS_ENV: production
+    ports:
+      - "${MSF_RPC_PORT:-55553}:55553"
+    volumes:
+      # Writes config/database.yml from these env vars at container start
+      # instead of using DATABASE_URL — see the comment in start.sh for why.
+      - ./msf/start.sh:/start.sh:ro
+    entrypoint: ["/bin/bash", "/start.sh"]
+
 volumes:
   es_pg_data:
+  msf_pg_data:

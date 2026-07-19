@@ -1,9 +1,10 @@
 # Getting Started
 
 Scorpion is a local-first AI security platform: a Coding Agent (`analyze`/`fix`)
-and a Pentest Agent (`scan`, chaining httpx, subfinder, katana, nmap, nuclei,
-ffuf, dalfox, sqlmap, and OWASP ZAP) behind one CLI, with an LLM router that
-works with either a cloud provider or a local model (Ollama).
+and a Pentest Agent (`scan`, chaining httpx, subfinder, amass, katana, nmap,
+nuclei, nikto, ffuf, feroxbuster, dalfox, sqlmap, OWASP ZAP, and a Metasploit
+auxiliary/scanner module) behind one CLI, with an LLM router that works with
+either a cloud provider or a local model (Ollama).
 
 Written and verified on Windows and Linux — see docs/WINDOWS.md /
 docs/LINUX.md for what's different (and what actually went wrong and got
@@ -34,8 +35,10 @@ cp .env.example .env             # then fill in SCORPION_CODING_MODELS + a provi
                                   # just without LLM summaries/patches)
 
 cd docker
-cp .env.example .env              # set a real ES_PG_PASSWORD — compose refuses to start without one
-docker compose up -d              # starts Postgres+pgvector on localhost:55432
+cp .env.example .env              # set real ES_PG_PASSWORD/MSF_PG_PASSWORD/MSF_RPC_PASSWORD —
+                                  # compose refuses to start without them
+docker compose up -d              # starts Postgres+pgvector, Metasploit's own
+                                  # Postgres, and msfrpcd (localhost:55432/55553)
 cd ..
 
 # ffuf has no maintained official Docker image — build it once from source:
@@ -119,13 +122,17 @@ several minutes end-to-end (nuclei alone can run ~3000 requests).
 each discover subdomains independently (different passive data sources,
 so running both surfaces more real subdomains than either alone), httpx
 probes all of them (one batched call) to find which actually respond, and
-the rest of the pipeline (katana, zap-baseline, nmap, nuclei, nikto, ffuf,
-feroxbuster, dalfox, sqlmap, zap-full-scan) runs once per live host — a discovered
-`api.example.com` gets the same active scan as `example.com` itself, not
-just a line in a subdomain list. zap-full-scan is by far the slowest
-stage (it actively attacks every spidered page/param rather than a fixed
-template set) — expect several extra minutes per host versus nuclei
-alone. This is capped at 5 hosts by default
+the rest of the pipeline (katana, zap-baseline, nmap, nuclei, nikto,
+msf-http-version, ffuf, feroxbuster, dalfox, sqlmap, zap-full-scan) runs
+once per live host — a discovered `api.example.com` gets the same active
+scan as `example.com` itself, not just a line in a subdomain list.
+zap-full-scan is by far the slowest stage (it actively attacks every
+spidered page/param rather than a fixed template set) — expect several
+extra minutes per host versus nuclei alone. `msf-http-version` needs
+Metasploit's RPC daemon up (`scorpion launch` handles this, or `docker
+compose up msf_rpc` directly) — if it isn't reachable yet, that stage just
+reports skipped/failed like any other tool outage, the rest of the scan
+still runs. This is capped at 5 hosts by default
 (`SCORPION_MAX_ENUMERATED_HOSTS`) to bound how long a scan takes and how
 much a single target gets hit; anything beyond the cap is still reported
 by subfinder/amass, just not actively scanned, and the warnings say how
