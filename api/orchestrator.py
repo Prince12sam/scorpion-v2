@@ -58,6 +58,7 @@ from api.tool_router import (
     run_sqlmap,
     run_subfinder,
     run_testssl,
+    run_theharvester,
     run_wpscan,
     run_zap_baseline,
     run_zap_full_scan,
@@ -71,6 +72,7 @@ TargetForm = Literal["host", "url"]
 ENUMERATION_SOURCES: list[tuple[str, Callable[[str], list[dict]]]] = [
     ("subfinder", run_subfinder),
     ("amass", run_amass),
+    ("theharvester", run_theharvester),
 ]
 
 

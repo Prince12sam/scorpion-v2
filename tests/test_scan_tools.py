@@ -17,6 +17,7 @@ from pathlib import Path
 from api.config import settings
 from api.tool_router import (
     _parse_amass_output,
+    _theharvester_host_names,
     run_amass,
     run_dalfox,
     run_feroxbuster,
@@ -28,6 +29,7 @@ from api.tool_router import (
     run_sqlmap,
     run_subfinder,
     run_testssl,
+    run_theharvester,
     run_wpscan,
     run_zap_api_scan,
     run_zap_baseline,
@@ -427,3 +429,30 @@ def test_wpscan_runs_cleanly_against_a_non_wordpress_host():
         httpd.shutdown()
         tmpdir.cleanup()
     assert findings == []
+
+
+def test_theharvester_host_names_dedups_bare_and_paired_entries():
+    # Grammar confirmed against real `theHarvester -d example.com -b
+    # hackertarget,otx,...` JSON output: each host appears both bare
+    # ("api.example.com") and paired with an IP/CNAME target
+    # ("api.example.com:1.2.3.4" or "cdn.example.com:some.cdn.net").
+    hosts = [
+        "api.example.com",
+        "api.example.com:1.2.3.4",
+        "cdn.example.com:edge.some-cdn.net",
+        "",
+    ]
+    assert _theharvester_host_names(hosts) == {"api.example.com", "cdn.example.com"}
+
+
+def test_theharvester_runs_cleanly_against_a_safe_domain():
+    # Passive-only against public third-party OSINT sources (crt.sh,
+    # HackerTarget, OTX, urlscan, RapidDNS via SCORPION_THEHARVESTER_SOURCES)
+    # — never contacts the domain's own infrastructure, same passive-recon
+    # classification as subfinder/amass. Confirmed via a real run: OTX's
+    # public pulse data surfaces plenty of *.example.com-looking noise for
+    # this domain (not real live infrastructure — example.com has no actual
+    # subdomains), so this only asserts the tool runs/parses cleanly and
+    # every finding is correctly tagged, not any particular count.
+    findings = run_theharvester("example.com")
+    assert all(f["source_tool"] == "theharvester" for f in findings)

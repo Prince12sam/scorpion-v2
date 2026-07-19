@@ -1118,3 +1118,101 @@ def run_wpscan(url: str) -> list[dict]:
             )
 
         return findings
+
+
+def _theharvester_host_names(hosts: list) -> set[str]:
+    # Real output lists each host both bare ("api.example.com") and paired
+    # with an IP/CNAME target ("api.example.com:1.2.3.4") — dedup on the
+    # hostname half.
+    names = set()
+    for entry in hosts or []:
+        if not isinstance(entry, str):
+            continue
+        name = entry.split(":", 1)[0]
+        if name:
+            names.add(name)
+    return names
+
+
+def run_theharvester(domain: str) -> list[dict]:
+    """Passive OSINT enumeration via secsi/theharvester — subdomains, ASNs,
+    email addresses, and people from public passive sources only
+    (SCORPION_THEHARVESTER_SOURCES: crt.sh, HackerTarget, OTX, urlscan,
+    RapidDNS by default, all free/no-API-key). Different underlying data
+    sources than subfinder/amass, and unlike either, also surfaces
+    non-subdomain OSINT (emails, ASNs) with genuine recon value of its own.
+    Never queries the target's own infrastructure — passive-recon, same
+    classification as subfinder/amass.
+    """
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        report_name = "theharvester"
+        cmd = [
+            "docker", "run", "--rm",
+            "-v", f"{Path(tmp_dir).resolve()}:/out:rw",
+            settings.theharvester_docker_image,
+            "-d", domain, "-b", settings.theharvester_sources, "-f", f"/out/{report_name}", "-q",
+        ]
+        result = _run_docker(cmd, "theHarvester", timeout=settings.theharvester_timeout_seconds)
+        report_path = Path(tmp_dir) / f"{report_name}.json"
+        if result.returncode != 0 and not report_path.exists():
+            raise ToolError(f"theHarvester failed (exit {result.returncode}): {result.stderr[-2000:]}")
+        if not report_path.exists():
+            return []
+
+        try:
+            data = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))
+        except json.JSONDecodeError as exc:
+            raise ToolError(f"could not parse theHarvester output: {exc}") from exc
+
+        findings = []
+        for name in sorted(_theharvester_host_names(data.get("hosts"))):
+            if name != domain and name.endswith(f".{domain}"):
+                findings.append(
+                    {
+                        "source_tool": "theharvester",
+                        "severity": "info",
+                        "title": f"subdomain: {name}",
+                        "description": "source: theHarvester (passive enumeration)",
+                        "file_path": None,
+                        "line": None,
+                        "host": name,
+                    }
+                )
+
+        for email in data.get("emails") or []:
+            findings.append(
+                {
+                    "source_tool": "theharvester",
+                    "severity": "info",
+                    "title": f"email address discovered: {email}",
+                    "description": "source: theHarvester (passive OSINT)",
+                    "file_path": None,
+                    "line": None,
+                }
+            )
+
+        for person in data.get("people") or []:
+            findings.append(
+                {
+                    "source_tool": "theharvester",
+                    "severity": "info",
+                    "title": f"person/employee discovered: {person}",
+                    "description": "source: theHarvester (passive OSINT)",
+                    "file_path": None,
+                    "line": None,
+                }
+            )
+
+        for asn in data.get("asns") or []:
+            findings.append(
+                {
+                    "source_tool": "theharvester",
+                    "severity": "info",
+                    "title": f"ASN discovered: {asn}",
+                    "description": "source: theHarvester (passive OSINT)",
+                    "file_path": None,
+                    "line": None,
+                }
+            )
+
+        return findings

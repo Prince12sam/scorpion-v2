@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     # sullo/nikto Docker Hub name that's often referenced doesn't exist.
     nikto_docker_image: str = "ghcr.io/sullo/nikto"
     testssl_docker_image: str = "drwetter/testssl.sh"
+    theharvester_docker_image: str = "secsi/theharvester"
+    # Free, no-API-key-required sources only (crtsh/hackertarget/otx/urlscan/
+    # rapiddns) — confirmed for real all return useful data without a key.
+    # Comma-separated, passed straight to theHarvester's -b.
+    theharvester_sources: str = "crtsh,hackertarget,otx,urlscan,rapiddns"
     wpscan_docker_image: str = "wpscanteam/wpscan"
     # Optional — get a free token (25 req/day) at https://wpscan.com/register.
     # Without one, plugin/theme enumeration still runs (all-plugins/themes
@@ -95,6 +100,9 @@ class Settings(BaseSettings):
     # measured ~7s against a near-empty test site; budget more for a real
     # site with more redirects/content.
     wpscan_timeout_seconds: int = 180
+    # Multi-source passive OSINT lookup (crt.sh, HackerTarget, OTX, urlscan,
+    # RapidDNS) — measured ~12s against a real domain with 5 sources.
+    theharvester_timeout_seconds: int = 90
     zap_baseline_timeout_seconds: int = 300
     # zap-full-scan actively attacks every spidered page/param, not just a
     # fixed template set like nuclei — genuinely slower on a real site with
