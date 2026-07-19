@@ -52,6 +52,9 @@ class ScanResponse(BaseModel):
     findings: list[Finding]
     warnings: list[str]
     summary: str
+    # Deliverable/report content requirements extracted from the target's
+    # SOW (api/sow.py), if it was authorized via one — empty otherwise.
+    report_requirements: list[str] = []
 
 
 class ScanApiRequest(BaseModel):
@@ -65,6 +68,7 @@ class ScanApiResponse(BaseModel):
     findings: list[Finding]
     warnings: list[str]
     summary: str
+    report_requirements: list[str] = []
 
 
 class VerifyTargetRequest(BaseModel):

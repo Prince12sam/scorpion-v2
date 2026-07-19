@@ -55,6 +55,11 @@ class Target(Base):
     # api/sow.py — the accountability record behind that specific decision,
     # same principle as self-attestation's logged statement.
     sow_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Deliverable/report content requirements api/sow.py's LLM analysis
+    # extracted from the same SOW (e.g. "executive summary", "CVSS score
+    # per finding") — empty list if the SOW didn't specify a report format.
+    # Only ever set alongside sow_text, by the same verify_sow() call.
+    report_requirements: Mapped[list] = mapped_column(JSON, default=list)
 
 
 class Finding(Base):

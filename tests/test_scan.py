@@ -116,6 +116,34 @@ def test_verify_sow_grants_exploitation_only_when_parsed_result_says_so():
         session.close()
 
 
+def test_verify_sow_persists_report_requirements():
+    session = SessionLocal()
+    try:
+        target = _unique_test_domain()
+        verify_sow(
+            session,
+            target,
+            "a real SOW",
+            {
+                "targets": [target],
+                "exploitation_authorized": False,
+                "reasoning": "x",
+                "report_requirements": ["executive summary", "CVSS score per finding"],
+            },
+        )
+        row = get_or_create_target(session, target)
+        assert row.report_requirements == ["executive summary", "CVSS score per finding"]
+
+        # Older/degenerate parsed results without the field shouldn't crash
+        # or leave a stale value from a prior verification on the row.
+        target_b = _unique_test_domain()
+        verify_sow(session, target_b, "a real SOW", {"targets": [target_b], "exploitation_authorized": False})
+        row_b = get_or_create_target(session, target_b)
+        assert row_b.report_requirements == []
+    finally:
+        session.close()
+
+
 def test_expired_verification_reports_as_expired_not_verified():
     """Regression: found on Kali against a real target (afrimarkethub.store)
     — a self-attestation past its TTL still reported status="verified" from

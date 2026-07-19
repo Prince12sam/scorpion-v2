@@ -134,6 +134,7 @@ def verify_sow(session: Session, identifier: str, sow_text: str, parsed: dict) -
     target.verification_method = f"sow: {parsed.get('reasoning', '')[:400]}"
     target.authorized_actions = actions
     target.sow_text = sow_text
+    target.report_requirements = parsed.get("report_requirements") or []
     target.expires_at = _ttl_expiry()
     session.commit()
     session.refresh(target)

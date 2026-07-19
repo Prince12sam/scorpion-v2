@@ -25,6 +25,9 @@ def init_db() -> None:
     # model.
     with engine.begin() as conn:
         conn.execute(text("ALTER TABLE targets ADD COLUMN IF NOT EXISTS sow_text TEXT"))
+        conn.execute(
+            text("ALTER TABLE targets ADD COLUMN IF NOT EXISTS report_requirements JSON DEFAULT '[]'::json")
+        )
 
 
 def get_session() -> Generator[Session, None, None]:

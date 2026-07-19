@@ -15,10 +15,13 @@ Respond with ONLY a JSON object, no markdown fences, no explanation:
 {{
   "targets": ["list of in-scope hostnames/domains/IPs explicitly named"],
   "exploitation_authorized": true or false,
-  "reasoning": "one sentence citing the specific SOW language behind this decision"
+  "reasoning": "one sentence citing the specific SOW language behind this decision",
+  "report_requirements": ["list of specific deliverable/report content requirements the SOW explicitly states, e.g. 'executive summary', 'CVSS score per finding', 'remediation timeline' — empty list if the SOW doesn't specify a report format"]
 }}
 
 exploitation_authorized must be true ONLY if the SOW explicitly permits going beyond passive detection to confirm a vulnerability's real impact (e.g. explicitly allows enumerating database contents, extracting a proof-of-concept sample, demonstrating unauthorized access). General language like "penetration testing" or "vulnerability scanning" alone is NOT enough — when in doubt, answer false.
+
+report_requirements must list ONLY deliverable/report content requirements the SOW explicitly states (e.g. a "Deliverables" or "Reporting" clause) — do not invent typical pentest report sections it doesn't actually mention.
 
 SOW:
 {sow_text}

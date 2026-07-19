@@ -321,7 +321,12 @@ def scan(
 
     if report:
         content = render_markdown(
-            "Scorpion Pentest Report", target, findings, result["summary"], warnings=result["warnings"]
+            "Scorpion Pentest Report",
+            target,
+            findings,
+            result["summary"],
+            warnings=result["warnings"],
+            report_requirements=result.get("report_requirements"),
         )
         out = write_report(report, content)
         console.print(f"[dim]Report written to {out}[/dim]")
@@ -395,7 +400,12 @@ def scan_api(
 
     if report:
         content = render_markdown(
-            "Scorpion API Scan Report", target, findings, result["summary"], warnings=result["warnings"]
+            "Scorpion API Scan Report",
+            target,
+            findings,
+            result["summary"],
+            warnings=result["warnings"],
+            report_requirements=result.get("report_requirements"),
         )
         out = write_report(report, content)
         console.print(f"[dim]Report written to {out}[/dim]")

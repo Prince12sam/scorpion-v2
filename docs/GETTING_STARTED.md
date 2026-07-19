@@ -88,7 +88,16 @@ scorpion scan-api some-target.example --spec openapi.json \
 Add `--report path/to/file.md` to `analyze`, `scan`, or `scan-api` to also
 write the findings, summary, and warnings to a Markdown file — useful for a
 bug bounty submission or client deliverable instead of copying terminal
-output. Findings are sorted by severity (critical first).
+output. Findings are sorted by severity (critical first). If the target was
+authorized via `scorpion authorize-sow` and that SOW's own "Deliverables"/
+"Reporting" clause specifies what the final report must contain (e.g. "an
+executive summary", "a CVSS score per finding"), the report opens with a
+checklist of those exact requirements — not an attempt to auto-satisfy each
+one (a free-text requirement can't be reliably matched against generated
+sections), just a visible reminder of what the SOW actually asked for so it
+doesn't get missed when the report is finalized. A "Methodology" section
+listing every tool that ran is always included when there are findings,
+regardless of what the SOW asks for.
 
 Findings are also correlated before display: a real scan often has
 several tools flag the same underlying issue on the same URL (e.g.

@@ -110,14 +110,21 @@ def scan_progress(target: str) -> ScanProgressResponse:
 def scan_target(req: ScanRequest, session: Session = Depends(get_session)) -> ScanResponse:
     result = run_scan(session, req.target)
 
+    report_requirements: list[str] = []
     try:
         target_row = get_or_create_target(session, req.target)
+        report_requirements = target_row.report_requirements or []
         save_findings_for_target(session, target_row, result["findings"])
     except Exception as exc:  # noqa: BLE001 - Memory being down shouldn't hide scan results
         session.rollback()
         result["warnings"].append(f"findings were not persisted to Memory: {exc}")
 
-    return ScanResponse(findings=result["findings"], warnings=result["warnings"], summary=result["summary"])
+    return ScanResponse(
+        findings=result["findings"],
+        warnings=result["warnings"],
+        summary=result["summary"],
+        report_requirements=report_requirements,
+    )
 
 
 @router.post("/scan-api", response_model=ScanApiResponse)
@@ -139,8 +146,10 @@ def scan_api_target(req: ScanApiRequest, session: Session = Depends(get_session)
     finally:
         scan_status.clear(req.target)
 
+    report_requirements: list[str] = []
     try:
         target_row = get_or_create_target(session, req.target)
+        report_requirements = target_row.report_requirements or []
         save_findings_for_target(session, target_row, findings)
     except Exception as exc:  # noqa: BLE001 - Memory being down shouldn't hide scan results
         session.rollback()
@@ -151,4 +160,6 @@ def scan_api_target(req: ScanApiRequest, session: Session = Depends(get_session)
         summary = summarize_findings(findings, warnings)
     finally:
         scan_status.clear(req.target)
-    return ScanApiResponse(findings=findings, warnings=warnings, summary=summary)
+    return ScanApiResponse(
+        findings=findings, warnings=warnings, summary=summary, report_requirements=report_requirements
+    )

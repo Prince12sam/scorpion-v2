@@ -46,6 +46,32 @@ def test_parse_sow_raises_on_missing_required_fields(monkeypatch):
         parse_sow("some SOW text")
 
 
+def test_parse_sow_returns_report_requirements_when_present(monkeypatch):
+    monkeypatch.setattr(
+        sow_module,
+        "complete",
+        lambda *a, **k: (
+            '{"targets": ["example.com"], "exploitation_authorized": false, "reasoning": "n/a", '
+            '"report_requirements": ["executive summary", "CVSS score per finding"]}'
+        ),
+    )
+    result = parse_sow("some SOW text")
+    assert result["report_requirements"] == ["executive summary", "CVSS score per finding"]
+
+
+def test_parse_sow_omits_report_requirements_without_raising(monkeypatch):
+    # report_requirements isn't in the required-fields check — a SOW with
+    # no deliverable/reporting clause, or an older model response that
+    # simply doesn't include the key, shouldn't fail the whole parse.
+    monkeypatch.setattr(
+        sow_module,
+        "complete",
+        lambda *a, **k: '{"targets": ["example.com"], "exploitation_authorized": false, "reasoning": "n/a"}',
+    )
+    result = parse_sow("some SOW text")
+    assert result.get("report_requirements") is None
+
+
 def test_parse_sow_raises_when_llm_unavailable(monkeypatch):
     from api.llm_router import LLMUnavailable
 

@@ -21,6 +21,7 @@ def render_markdown(
     findings: list[dict],
     summary: str,
     warnings: list[str] | None = None,
+    report_requirements: list[str] | None = None,
 ) -> str:
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     lines = [
@@ -32,6 +33,17 @@ def render_markdown(
         "",
     ]
 
+    if report_requirements:
+        # Surfaced verbatim from the SOW's own deliverable/reporting clause
+        # (api/sow.py) — a checklist for whoever finalizes this report, not
+        # an attempt to auto-satisfy each item (fuzzy-matching a free-text
+        # requirement against generated sections would be more likely to
+        # give false reassurance than real coverage).
+        lines.append("## Report Requirements (per Statement of Work)")
+        lines.append("The authorizing SOW specifies this deliverable must include:")
+        lines.extend(f"- [ ] {r}" for r in report_requirements)
+        lines.append("")
+
     if warnings:
         lines.append("## Warnings")
         lines.extend(f"- {w}" for w in warnings)
@@ -40,6 +52,17 @@ def render_markdown(
     lines.append("## Summary")
     lines.append(summary or "No summary.")
     lines.append("")
+
+    if findings:
+        # Free — the finding schema already carries this, and it's near-
+        # universally expected in a professional pentest deliverable
+        # regardless of what the SOW's own wording asks for.
+        tools = sorted({f["source_tool"] for f in findings if f.get("source_tool")})
+        if tools:
+            lines.append("## Methodology")
+            lines.append("Tools used during this engagement:")
+            lines.extend(f"- {t}" for t in tools)
+            lines.append("")
 
     lines.append("## Findings")
     if not findings:
